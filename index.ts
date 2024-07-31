@@ -1,5 +1,7 @@
-import { Schema, BaseUrls, RestQLOptions, EventType, Subscriber, ParsedOperation, ParsedQuery, CompiledOperation, Endpoint, HttpMethod, VariableValues, CacheEntry } from './types';
-import { RestQLParser, CacheManager, BatchManager } from './utils';
+import { Schema, BaseUrls, RestQLOptions, EventType, Subscriber, ParsedOperation, ParsedQuery, CompiledOperation, Endpoint, HttpMethod, VariableValues } from './types';
+import { CacheManager } from './CacheManager';
+import { BatchManager } from './BatchManager';
+import { RestQLParser } from './parser';
 import { NetworkError, ValidationError, SchemaError } from './errors';
 
 export class RestQL {
