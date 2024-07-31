@@ -74,136 +74,228 @@ export class Tokenizer {
   }
 }
 
+import { Token, TokenType, ParsedOperation, ParsedQuery } from './types';
+
 export class RestQLParser {
   private tokens: Token[] = [];
   private pos: number = 0;
-  private memoTable: Map<string, ParsedOperation> = new Map();
 
-  parse(queryString: string): ParsedOperation {
-    const tokenizer = new Tokenizer();
-    this.tokens = tokenizer.tokenize(queryString);
+  parse(operationString: string): ParsedOperation {
+    this.tokens = this.tokenize(operationString);
     this.pos = 0;
     
-    const memoKey = this.getMemoKey();
-    if (this.memoTable.has(memoKey)) {
-      return this.memoTable.get(memoKey)!;
-    }
-
-    const operationType = this.consume(TokenType.IDENTIFIER).value.toLowerCase();
-    const operationName = this.consume(TokenType.IDENTIFIER).value;
-    let variables: { [key: string]: string } = {};
+    const operationType = this.consumeToken(TokenType.IDENTIFIER).value.toLowerCase() as 'query' | 'mutation';
+    const operationName = this.consumeToken(TokenType.IDENTIFIER).value;
     
+    let variables: { [key: string]: { type: string } } = {};
     if (this.peek().type === TokenType.LEFT_PAREN) {
       variables = this.parseVariables();
     }
-    
-    this.consume(TokenType.LEFT_BRACE);
-    const queries = this.parseQueries();
-    this.consume(TokenType.RIGHT_BRACE);
 
-    const parsedOperation: ParsedOperation = { operationType, operationName, variables, queries };
-    this.memoTable.set(memoKey, parsedOperation);
-    return parsedOperation;
+    const queries = this.parseQueries();
+
+    return { operationType, operationName, variables, queries };
   }
 
-  private parseVariables(): { [key: string]: string } {
-    const variables: { [key: string]: string } = {};
-    this.consume(TokenType.LEFT_PAREN);
-    while (this.peek().type !== TokenType.RIGHT_PAREN) {
-      const varName = this.consume(TokenType.IDENTIFIER).value;
-      this.consume(TokenType.COLON);
-      const varType = this.consume(TokenType.IDENTIFIER).value;
-      if (this.peek().type === TokenType.EXCLAMATION) {
-        this.consume(TokenType.EXCLAMATION);
+  private tokenize(input: string): Token[] {
+    const tokens: Token[] = [];
+    let pos = 0;
+
+    while (pos < input.length) {
+      if (/\s/.test(input[pos])) {
+        pos++;
+        continue;
       }
-      variables[varName] = varType;
+
+      if (/[a-zA-Z_]/.test(input[pos])) {
+        let identifier = '';
+        const start = pos;
+        while (pos < input.length && /[a-zA-Z0-9_]/.test(input[pos])) {
+          identifier += input[pos++];
+        }
+        tokens.push({ type: TokenType.IDENTIFIER, value: identifier, pos: start });
+        continue;
+      }
+
+      if (input[pos] === '{') {
+        tokens.push({ type: TokenType.LEFT_BRACE, value: '{', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === '}') {
+        tokens.push({ type: TokenType.RIGHT_BRACE, value: '}', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === '(') {
+        tokens.push({ type: TokenType.LEFT_PAREN, value: '(', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === ')') {
+        tokens.push({ type: TokenType.RIGHT_PAREN, value: ')', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === ':') {
+        tokens.push({ type: TokenType.COLON, value: ':', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === ',') {
+        tokens.push({ type: TokenType.COMMA, value: ',', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === '$') {
+        tokens.push({ type: TokenType.IDENTIFIER, value: '$' + input[++pos], pos: pos - 1 });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === '!') {
+        tokens.push({ type: TokenType.EXCLAMATION, value: '!', pos });
+        pos++;
+        continue;
+      }
+
+      if (input[pos] === '"') {
+        let string = '';
+        const start = pos;
+        pos++; // Skip opening quote
+        while (pos < input.length && input[pos] !== '"') {
+          string += input[pos++];
+        }
+        if (pos < input.length) pos++; // Skip closing quote
+        tokens.push({ type: TokenType.STRING, value: string, pos: start });
+        continue;
+      }
+
+      throw new Error(`Unexpected character at position ${pos}: ${input[pos]}`);
+    }
+
+    tokens.push({ type: TokenType.EOF, value: '', pos: input.length });
+    return tokens;
+  }
+
+  private parseVariables(): { [key: string]: { type: string } } {
+    const variables: { [key: string]: { type: string } } = {};
+    this.consumeToken(TokenType.LEFT_PAREN);
+    
+    while (this.peek().type !== TokenType.RIGHT_PAREN) {
+      const varName = this.consumeToken(TokenType.IDENTIFIER).value.slice(1); // Remove '$'
+      this.consumeToken(TokenType.COLON);
+      const varType = this.consumeToken(TokenType.IDENTIFIER).value;
+      const isRequired = this.peek().type === TokenType.EXCLAMATION;
+      if (isRequired) {
+        this.consumeToken(TokenType.EXCLAMATION);
+      }
+      variables[varName] = { type: varType + (isRequired ? '!' : '') };
+      
       if (this.peek().type === TokenType.COMMA) {
-        this.consume(TokenType.COMMA);
+        this.consumeToken(TokenType.COMMA);
       }
     }
-    this.consume(TokenType.RIGHT_PAREN);
+    
+    this.consumeToken(TokenType.RIGHT_PAREN);
     return variables;
   }
 
   private parseQueries(): ParsedQuery[] {
     const queries: ParsedQuery[] = [];
+    this.consumeToken(TokenType.LEFT_BRACE);
+    
     while (this.peek().type !== TokenType.RIGHT_BRACE) {
       queries.push(this.parseQuery());
     }
+    
+    this.consumeToken(TokenType.RIGHT_BRACE);
     return queries;
   }
 
   private parseQuery(): ParsedQuery {
-    const queryName = this.consume(TokenType.IDENTIFIER).value;
+    const queryName = this.consumeToken(TokenType.IDENTIFIER).value;
     let args: { [key: string]: string } = {};
-    let fields: { [key: string]: any } = {};
-
+    
     if (this.peek().type === TokenType.LEFT_PAREN) {
       args = this.parseArguments();
     }
-
-    fields = this.parseFields();
-
+    
+    const fields = this.parseFields();
+    
     return { queryName, args, fields };
   }
 
   private parseArguments(): { [key: string]: string } {
     const args: { [key: string]: string } = {};
-    this.consume(TokenType.LEFT_PAREN);
+    this.consumeToken(TokenType.LEFT_PAREN);
+    
     while (this.peek().type !== TokenType.RIGHT_PAREN) {
-      const key = this.consume(TokenType.IDENTIFIER).value;
-      this.consume(TokenType.COLON);
-      const value = this.parseValue();
-      args[key] = value;
+      const argName = this.consumeToken(TokenType.IDENTIFIER).value;
+      this.consumeToken(TokenType.COLON);
+      const argValue = this.parseValue();
+      args[argName] = argValue;
+      
       if (this.peek().type === TokenType.COMMA) {
-        this.consume(TokenType.COMMA);
+        this.consumeToken(TokenType.COMMA);
       }
     }
-    this.consume(TokenType.RIGHT_PAREN);
+    
+    this.consumeToken(TokenType.RIGHT_PAREN);
     return args;
   }
 
   private parseFields(): { [key: string]: any } {
     const fields: { [key: string]: any } = {};
-    this.consume(TokenType.LEFT_BRACE);
+    this.consumeToken(TokenType.LEFT_BRACE);
+    
     while (this.peek().type !== TokenType.RIGHT_BRACE) {
-      const key = this.consume(TokenType.IDENTIFIER).value;
+      const fieldName = this.consumeToken(TokenType.IDENTIFIER).value;
+      
       if (this.peek().type === TokenType.LEFT_BRACE) {
-        fields[key] = this.parseFields();
-      } else if (this.peek().type === TokenType.LEFT_PAREN) {
-        const args = this.parseArguments();
-        fields[key] = { args, fields: this.parseFields() };
+        fields[fieldName] = this.parseFields();
       } else {
-        fields[key] = true;
+        fields[fieldName] = true;
+      }
+      
+      if (this.peek().type === TokenType.COMMA) {
+        this.consumeToken(TokenType.COMMA);
       }
     }
-    this.consume(TokenType.RIGHT_BRACE);
+    
+    this.consumeToken(TokenType.RIGHT_BRACE);
     return fields;
   }
 
   private parseValue(): string {
-    if (this.peek().type === TokenType.STRING) {
-      return this.consume(TokenType.STRING).value.replace(/^"|"$/g, "");
-    } else if (this.peek().type === TokenType.IDENTIFIER) {
-      return `$${this.consume(TokenType.IDENTIFIER).value}`;
-    } else {
-      throw new Error(`Unexpected token type: ${this.peek().type}`);
-    }
+    const token = this.consumeToken(TokenType.IDENTIFIER, TokenType.STRING);
+    return token.type === TokenType.IDENTIFIER && token.value.startsWith('$')
+      ? token.value
+      : token.value;
   }
 
-  private consume(expected: TokenType): Token {
-    if (this.pos >= this.tokens.length || this.tokens[this.pos].type !== expected) {
-      throw new Error(`Expected ${TokenType[expected]} but got ${TokenType[this.tokens[this.pos].type]} at position ${this.tokens[this.pos].pos}`);
+  private consumeToken(...expectedTypes: TokenType[]): Token {
+    if (this.pos >= this.tokens.length) {
+      throw new Error('Unexpected end of input');
     }
-    return this.tokens[this.pos++];
+    
+    const token = this.tokens[this.pos];
+    if (!expectedTypes.includes(token.type)) {
+      throw new Error(`Unexpected token: ${token.value} at position ${token.pos}`);
+    }
+    
+    this.pos++;
+    return token;
   }
 
   private peek(): Token {
-    return this.tokens[this.pos];
-  }
-
-  private getMemoKey(): string {
-    return this.tokens.slice(this.pos).map((t) => t.value).join("");
+    return this.tokens[this.pos] || { type: TokenType.EOF, value: '', pos: -1 };
   }
 }
 

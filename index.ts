@@ -1,4 +1,4 @@
-import { Schema, BaseUrls, RestQLOptions, EventType, Subscriber, ParsedOperation, ParsedQuery, CompiledQuery, Endpoint, HttpMethod } from './types';
+import { Schema, BaseUrls, RestQLOptions, EventType, Subscriber, ParsedOperation, ParsedQuery, CompiledOperation, Endpoint, HttpMethod, VariableValues, CacheEntry } from './types';
 import { RestQLParser, CacheManager, BatchManager } from './utils';
 import { NetworkError, ValidationError, SchemaError } from './errors';
 
@@ -9,7 +9,7 @@ export class RestQL {
   private pollingIntervals: { [key: string]: number };
   private options: Required<RestQLOptions>;
   private parser: RestQLParser;
-  private compiledQueries: Map<string, CompiledQuery>;
+  private compiledOperations: Map<string, CompiledOperation>;
   private activeRequests: Set<string>;
   private cacheManager: CacheManager;
   private batchManager: BatchManager;
@@ -29,13 +29,13 @@ export class RestQL {
       ...options,
     };
     this.parser = new RestQLParser();
-    this.compiledQueries = new Map();
+    this.compiledOperations = new Map();
     this.activeRequests = new Set();
     this.cacheManager = new CacheManager(this.options.cacheTimeout);
     this.batchManager = new BatchManager(this.options.batchInterval);
   }
 
-  async execute(operationString: string, variables: { [key: string]: any } = {}): Promise<any> {
+  async execute(operationString: string, variables: VariableValues = {}): Promise<any> {
     const parsedOperation = this.parser.parse(operationString);
     
     if (parsedOperation.operationType === 'query') {
@@ -47,11 +47,11 @@ export class RestQL {
     }
   }
 
-  private async executeQuery(parsedOperation: ParsedOperation, variables: { [key: string]: any }): Promise<any> {
+  private async executeQuery(parsedOperation: ParsedOperation, variables: VariableValues): Promise<any> {
     const compiledQueryKey = JSON.stringify({ operation: parsedOperation, variables });
     
-    if (this.compiledQueries.has(compiledQueryKey)) {
-      return this.compiledQueries.get(compiledQueryKey)!();
+    if (this.compiledOperations.has(compiledQueryKey)) {
+      return this.compiledOperations.get(compiledQueryKey)!(variables);
     }
 
     const optimizedQueries = this.optimizeQueries(parsedOperation.queries);
@@ -59,29 +59,68 @@ export class RestQL {
     const shapedData = this.shapeData(results, optimizedQueries);
 
     this.notifySubscribers("query", shapedData);
-    this.compileQuery(compiledQueryKey, optimizedQueries, variables);
+    this.compileOperation(compiledQueryKey, optimizedQueries);
 
     return shapedData;
   }
 
-  private async executeMutation(parsedOperation: ParsedOperation, variables: { [key: string]: any }): Promise<any> {
-    const results = await Promise.all(
-      parsedOperation.queries.map(query => this.executeSingleMutation(query, variables))
-    );
-    const shapedData = this.shapeData(results, parsedOperation.queries);
-    this.notifySubscribers("mutation", shapedData);
-    return shapedData;
-  }
+  private async executeMutation(parsedOperation: ParsedOperation, variables: VariableValues): Promise<any> {
+    const { queries } = parsedOperation;
+    if (queries.length !== 1) {
+      throw new ValidationError("Mutation must have exactly one operation");
+    }
 
-  private async executeSingleMutation(mutation: ParsedQuery, variables: { [key: string]: any }): Promise<any> {
+    const mutation = queries[0];
     const { queryName, args, fields } = mutation;
     const endpoint = this.getEndpoint(queryName, "POST");
-    const url = this.buildUrl(endpoint.path, this.resolveVariables(args, variables));
-    const response = await this.fetch(url, "POST", this.resolveVariables(args, variables));
-    return response.json();
+    const url = this.buildUrl(endpoint.path, {});
+    const body = this.resolveVariables(args, variables);
+
+    const response = await this.fetch(url, "POST", body);
+    const data = await response.json();
+
+    const shapedData = this.shapeData([data], [mutation]);
+    this.notifySubscribers("mutation", shapedData);
+
+    return shapedData[queryName];
   }
 
-  private resolveVariables(args: { [key: string]: string }, variables: { [key: string]: any }): { [key: string]: any } {
+  private async executeQueries(queries: ParsedQuery[], variables: VariableValues): Promise<any[]> {
+    const results: any[] = [];
+    const batchPromises: Promise<any>[] = [];
+
+    for (const query of queries) {
+      const { queryName, args, fields } = query;
+      const endpoint = this.getEndpoint(queryName, "GET");
+      const resolvedArgs = this.resolveVariables(args, variables);
+      const url = this.buildUrl(endpoint.path, resolvedArgs);
+      const cacheKey = this.getCacheKey(url, resolvedArgs);
+
+      const cachedData = this.cacheManager.get(cacheKey);
+      if (cachedData) {
+        results.push(cachedData);
+      } else {
+        batchPromises.push(
+          this.batchManager.add(url, async () => {
+            const response = await this.fetch(url, "GET");
+            const data = await response.json();
+            this.cacheManager.set(cacheKey, data);
+            return { url, data };
+          })
+        );
+      }
+    }
+
+    const batchedResults = await Promise.all(batchPromises);
+
+    for (const { url, data } of batchedResults) {
+      results.push(data);
+    }
+
+    return results;
+  }
+
+  private resolveVariables(args: { [key: string]: string }, variables: VariableValues): { [key: string]: any } {
     const resolved: { [key: string]: any } = {};
     for (const [key, value] of Object.entries(args)) {
       if (typeof value === 'string' && value.startsWith('$')) {
@@ -97,52 +136,17 @@ export class RestQL {
     return resolved;
   }
 
-  private compileQuery(key: string, queries: ParsedQuery[], variables: { [key: string]: any }) {
-    const compiledQuery = async () => {
+  private compileOperation(key: string, queries: ParsedQuery[]) {
+    const compiledOperation = async (variables: VariableValues) => {
       const results = await this.executeQueries(queries, variables);
       return this.shapeData(results, queries);
     };
-    this.compiledQueries.set(key, compiledQuery);
+    this.compiledOperations.set(key, compiledOperation);
   }
 
   private optimizeQueries(queries: ParsedQuery[]): ParsedQuery[] {
-    // Implement query optimization logic here
+    // Implement query optimization logic here if needed
     return queries;
-  }
-
-  private async executeQueries(queries: ParsedQuery[], variables: { [key: string]: any }): Promise<any[]> {
-    const results: any[] = [];
-    const batchPromises: Promise<any>[] = [];
-  
-    for (const query of queries) {
-      const { queryName, args, fields } = query;
-      const endpoint = this.getEndpoint(queryName, "GET");
-      const resolvedArgs = this.resolveVariables(args, variables);
-      const url = this.buildUrl(endpoint.path, resolvedArgs);
-      const cacheKey = this.getCacheKey(url, resolvedArgs);
-  
-      const cachedData = this.cacheManager.get(cacheKey);
-      if (cachedData) {
-        results.push(cachedData);
-      } else {
-        batchPromises.push(
-          this.batchManager.add(url, async () => {
-            const response = await this.fetch(url, "GET");
-            const data = await response.json();
-            this.cacheManager.set(cacheKey, data);
-            return { url, data };
-          })
-        );
-      }
-    }
-  
-    const batchedResults = await Promise.all(batchPromises);
-  
-    for (const { url, data } of batchedResults) {
-      results.push(data);
-    }
-  
-    return results;
   }
 
   private getEndpoint(resourceName: string, method: HttpMethod): Endpoint {

@@ -50,11 +50,9 @@ export interface ParsedQuery {
 export interface ParsedOperation {
   operationType: 'query' | 'mutation';
   operationName: string;
-  variables: { [key: string]: string };
+  variables: { [key: string]: { type: string } };
   queries: ParsedQuery[];
 }
-
-export type CompiledQuery = () => Promise<any>;
 
 export type VariableValues = { [key: string]: any };
 
@@ -63,6 +61,12 @@ export type CompiledOperation = (variables: VariableValues) => Promise<any>;
 export interface PaginationInfo {
   hasNextPage: boolean;
   endCursor: string;
+}
+
+export interface Token {
+  type: TokenType;
+  value: string;
+  pos: number;
 }
 
 export enum TokenType {
@@ -76,10 +80,4 @@ export enum TokenType {
   STRING = "STRING",
   EOF = "EOF",
   EXCLAMATION = "EXCLAMATION"
-}
-
-export interface Token {
-  type: TokenType;
-  value: string;
-  pos: number;
 }
