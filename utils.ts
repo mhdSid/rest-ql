@@ -74,27 +74,32 @@ export class Tokenizer {
   }
 }
 
-import { Token, TokenType, ParsedOperation, ParsedQuery } from './types';
-
 export class RestQLParser {
   private tokens: Token[] = [];
   private pos: number = 0;
 
   parse(operationString: string): ParsedOperation {
-    this.tokens = this.tokenize(operationString);
-    this.pos = 0;
-    
-    const operationType = this.consumeToken(TokenType.IDENTIFIER).value.toLowerCase() as 'query' | 'mutation';
-    const operationName = this.consumeToken(TokenType.IDENTIFIER).value;
-    
-    let variables: { [key: string]: { type: string } } = {};
-    if (this.peek().type === TokenType.LEFT_PAREN) {
-      variables = this.parseVariables();
+    try {
+      this.tokens = this.tokenize(operationString);
+      this.pos = 0;
+      
+      const operationType = this.consumeToken(TokenType.IDENTIFIER).value.toLowerCase() as 'query' | 'mutation';
+      const operationName = this.consumeToken(TokenType.IDENTIFIER).value;
+      
+      let variables: { [key: string]: { type: string } } = {};
+      if (this.peek().type === TokenType.LEFT_PAREN) {
+        variables = this.parseVariables();
+      }
+
+      const queries = this.parseQueries();
+
+      return { operationType, operationName, variables, queries };
+    } catch (error) {
+      console.error('Parsing error:', error);
+      console.error('Operation string:', operationString);
+      console.error('Tokens:', this.tokens);
+      throw error;
     }
-
-    const queries = this.parseQueries();
-
-    return { operationType, operationName, variables, queries };
   }
 
   private tokenize(input: string): Token[] {
@@ -107,10 +112,10 @@ export class RestQLParser {
         continue;
       }
 
-      if (/[a-zA-Z_]/.test(input[pos])) {
+      if (/[a-zA-Z_$]/.test(input[pos])) {
         let identifier = '';
         const start = pos;
-        while (pos < input.length && /[a-zA-Z0-9_]/.test(input[pos])) {
+        while (pos < input.length && /[a-zA-Z0-9_$]/.test(input[pos])) {
           identifier += input[pos++];
         }
         tokens.push({ type: TokenType.IDENTIFIER, value: identifier, pos: start });
@@ -153,12 +158,6 @@ export class RestQLParser {
         continue;
       }
 
-      if (input[pos] === '$') {
-        tokens.push({ type: TokenType.IDENTIFIER, value: '$' + input[++pos], pos: pos - 1 });
-        pos++;
-        continue;
-      }
-
       if (input[pos] === '!') {
         tokens.push({ type: TokenType.EXCLAMATION, value: '!', pos });
         pos++;
@@ -177,7 +176,7 @@ export class RestQLParser {
         continue;
       }
 
-      throw new Error(`Unexpected character at position ${pos}: ${input[pos]}`);
+      throw new Error(`Unexpected character '${input[pos]}' at position ${pos}`);
     }
 
     tokens.push({ type: TokenType.EOF, value: '', pos: input.length });
@@ -189,7 +188,7 @@ export class RestQLParser {
     this.consumeToken(TokenType.LEFT_PAREN);
     
     while (this.peek().type !== TokenType.RIGHT_PAREN) {
-      const varName = this.consumeToken(TokenType.IDENTIFIER).value.slice(1); // Remove '$'
+      const varName = this.consumeToken(TokenType.IDENTIFIER).value;
       this.consumeToken(TokenType.COLON);
       const varType = this.consumeToken(TokenType.IDENTIFIER).value;
       const isRequired = this.peek().type === TokenType.EXCLAMATION;
@@ -287,7 +286,7 @@ export class RestQLParser {
     
     const token = this.tokens[this.pos];
     if (!expectedTypes.includes(token.type)) {
-      throw new Error(`Unexpected token: ${token.value} at position ${token.pos}`);
+      throw new Error(`Unexpected token: ${token.value} (${TokenType[token.type]}) at position ${token.pos}. Expected: ${expectedTypes.map(t => TokenType[t]).join(' or ')}`);
     }
     
     this.pos++;
