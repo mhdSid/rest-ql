@@ -241,7 +241,7 @@ export class CacheManager {
 export class BatchManager {
   private batchInterval: number;
   private queue: { [key: string]: (() => Promise<any>)[] };
-  private timer: number | null;  // Changed from NodeJS.Timeout to number
+  private timer: number | null;
 
   constructor(batchInterval: number) {
     this.batchInterval = batchInterval;
@@ -265,7 +265,7 @@ export class BatchManager {
       });
 
       if (!this.timer) {
-        this.timer = window.setTimeout(() => this.executeBatch(), this.batchInterval);  // Added 'window.' for clarity
+        this.timer = window.setTimeout(() => this.executeBatch(), this.batchInterval);
       }
     });
   }
