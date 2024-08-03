@@ -4,7 +4,7 @@ RestQL is a powerful and flexible library that allows you to query REST APIs usi
 It provides a seamless way to interact with REST endpoints, offering features like batched queries, caching, and data transformation.
 
 ## Features
-- **Intuitive Syntax***: RestQL offers a clear and precise syntax, enabling developers to articulate their data requirements succinctly.
+- **Intuitive Syntax**: RestQL offers a clear and precise syntax, enabling developers to articulate their data requirements succinctly.
 - **Built-in Types for Data Structures**: RestQL includes robust type definitions that operate at runtime, ensuring accurate data transformations and minimizing the risk of type-related errors
 - **Structured API Definition**: With support for a well-defined API schema, RestQL facilitates a more organized and maintainable codebase.
 - **Batch Processing**: By allowing the execution of multiple requests in a single operation, RestQL significantly reduces network latency and server load.
