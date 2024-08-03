@@ -4,13 +4,13 @@ RestQL is a powerful and flexible library that allows you to query REST APIs usi
 It provides a seamless way to interact with REST endpoints, offering features like batched queries, caching, and data transformation.
 
 ## Features
-
-- **GraphQL-like Syntax**: Write queries for your REST APIs using a familiar GraphQL-like syntax.
-- **SDL (Schema Definition Language) Support**: Define your API structure using SDL, making it easy to understand and maintain.
-- **Batched Queries**: Execute multiple queries in a single operation, reducing the number of API calls.
-- **Caching**: Efficiently cache query results to improve performance and reduce unnecessary network requests.
-- **Data Transformation**: Apply custom transformations to your data before it's returned.
-- **Type Safety**: Leverage TypeScript for type-safe operations and responses.
+- **Intuitive Syntax**: RestQL offers a clear and precise syntax, enabling developers to articulate their data requirements succinctly.
+- **Built-in Types for Data Structures**: RestQL includes robust type definitions that operate at runtime, ensuring accurate data transformations and minimizing the risk of type-related errors
+- **Structured API Definition**: With support for a well-defined API schema, RestQL facilitates a more organized and maintainable codebase.
+- **Batch Processing**: By allowing the execution of multiple requests in a single operation, RestQL significantly reduces network latency and server load.
+- **Advanced Caching Mechanisms**: The library incorporates efficient caching strategies, optimizing both time and resource utilization.
+- **Data Transformation**: Custom transformations can be applied to tailor the retrieved data to specific application needs.
+- **Type Safety**: With TypeScript support, RestQL ensures type safety, reducing runtime errors and enhancing code reliability
 
 ## Installation
 
@@ -23,6 +23,151 @@ or
 ```bash
 yarn add restql
 ```
+
+## Schema Definition Language (SDL)
+RestQL uses an SDL to define the structure of your API.
+
+### Type Definitions
+```typescript
+  type ResourceName {
+    field: FieldType @directive
+    ...
+  }
+```
+- **ResourceName**: Corresponds to a REST resource (e.g., User, Post)
+- **field**: Represents a property of the resource
+- **FieldType**: Can be scalar (String, Int, Boolean, etc.) or another defined type
+
+
+### Directives
+```typescript
+  type User {
+    id: String @from("user_id") @transform("transformUserId")
+    name: String @from("full_name")
+    email: String @from("contact_info.email")
+
+    @endpoint(GET, "/users", "data.data[0]")
+    @endpoint(POST, "/users", "data.data[0]")
+  }
+```
+- **@from("api_field_name")**: Maps the field to a different name in the API response
+- **@transform("transformerName")**: Applies a custom transformation to the field
+- **@endpoint(METHOD, "path", "dataPath")**: Defines REST endpoint for the
+
+### Query Language
+Basic Query Structure
+```typescript
+query QueryName {
+  resource {
+    field1
+    field2
+    nestedResource {
+      nestedField1
+    }
+  }
+}
+```
+
+### Query with Arguments
+```typescript
+query QueryName($arg: Type) {
+  resource(id: $arg) {
+    field1
+    field2
+  }
+}
+```
+
+### Multiple Resources in One Query
+```typescript
+query GetMultipleResources {
+  resource1 {
+    field1
+  }
+  resource2 {
+    field2
+  }
+}
+```
+
+### Mutation Language
+Basic Mutation Structure
+```typescript
+mutation MutationName($arg: Type) {
+  action(input: $arg) {
+    resultField1
+    resultField2
+  }
+}
+```
+
+Example:
+```typescript
+mutation CreateUser($name: String!, $email: String!) {
+  createUser(name: $name, email: $email) {
+    id
+    name
+    email
+  }
+}
+```
+
+### Nested Data Retrieval
+RestQL automatically handles nested data structures:
+```typescript
+query GetUserWithPosts {
+  user {
+    name
+    posts {
+      title
+      comments {
+        text
+      }
+    }
+  }
+}
+```
+
+### Array Fields
+Use square brackets to denote array fields:
+```typescript
+type User {
+  hobbies: [String]
+  friends: [User]
+}
+```
+
+Nested Arrays:
+```typescript
+type User {
+  hobbies: [String]
+  friends: [[User]]
+}
+```
+
+### Custom Transformers
+Define custom transformers in your RestQL initialization:
+
+```javascript
+const transformers = {
+  transformUserId: (originalData, shapedData) => ({
+    ...shapedData,
+    id: `custom_${shapedData.id}`
+  })
+};
+```
+
+### Execution
+Execute queries using the RestQL instance:
+
+```javascript
+const result = await restql.execute(queryString, variables, options);
+```
+
+- **queryString**: The RestQL query or mutation
+- *variables**: Object containing any variable values
+- **options**: Additional options like { useCache: true }
+
 
 ## Quick Start
 
