@@ -163,7 +163,7 @@ export class RestQL {
   ): Promise<any> {
     const results: any = {};
 
-    for (const mutation of parsedOperation.mutations) {
+    for (const mutation of parsedOperation.queries) {
       const resolvedArgs = this.resolveVariables(mutation.args, variables);
       const result = await this.executor.execute(
         { ...mutation, args: resolvedArgs },
