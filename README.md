@@ -37,17 +37,34 @@ const sdl = `
     email: String @from("contact_info.email")
     address: Address @from("location")
     hobbyList: [Hobby] @from("hobbies")
+
     @endpoint(GET, "/users", "data.data[0]")
   }
+
+  type Post {
+    id: String @from("post_id")
+    name: String @from("post_name")
+
+    @endpoint(GET, "/posts", "data.data[0]")
+  }
+
   type Address {
     street: String @from("street_name")
     city: String
     country: Country @from("country")
   }
+
   type Country {
     name: String @from("country_name")
     capital: String @from("capital_name")
+    blockList: [[Block]] @from("blocks")
   }
+
+  type Block {
+    name: String @from("block_name")
+    number: String @from("block_number")
+  }
+
   type Hobby {
     name: String @from("hobby_name")
     id: String @from("hobby_id")
@@ -86,7 +103,11 @@ const restql = new RestQL(sdl, baseUrls, options, transformers);
 
 // Define one or many queries
 const query = `
-  query GetUser {
+  query GetPageData {
+    post {
+      id
+      name
+    }
     user {
       id
       name
@@ -97,6 +118,10 @@ const query = `
         country {
           name
           capital
+          blockList {
+            name
+            number
+          }
         }
       }
       hobbyList {
