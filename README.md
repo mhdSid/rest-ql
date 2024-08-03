@@ -4,13 +4,13 @@ RestQL is a powerful and flexible library that allows you to query REST APIs usi
 It provides a seamless way to interact with REST endpoints, offering features like batched queries, caching, and data transformation.
 
 ## Features
-
-- **GraphQL-like Syntax**: Write queries for your REST APIs using a familiar GraphQL-like syntax.
-- **SDL (Schema Definition Language) Support**: Define your API structure using SDL, making it easy to understand and maintain.
-- **Batched Queries**: Execute multiple queries in a single operation, reducing the number of API calls.
-- **Caching**: Efficiently cache query results to improve performance and reduce unnecessary network requests.
-- **Data Transformation**: Apply custom transformations to your data before it's returned.
-- **Type Safety**: Leverage TypeScript for type-safe operations and responses.
+- **Intuitive Syntax***: RestQL offers a clear and precise syntax, enabling developers to articulate their data requirements succinctly.
+- **Built-in Types for Data Structures**: RestQL includes robust type definitions that operate at runtime, ensuring accurate data transformations and minimizing the risk of type-related errors
+- **Structured API Definition**: With support for a well-defined API schema, RestQL facilitates a more organized and maintainable codebase.
+- **Batch Processing**: By allowing the execution of multiple requests in a single operation, RestQL significantly reduces network latency and server load.
+- **Advanced Caching Mechanisms**: The library incorporates efficient caching strategies, optimizing both time and resource utilization.
+- **Data Transformation**: Custom transformations can be applied to tailor the retrieved data to specific application needs.
+- **Type Safety**: With TypeScript support, RestQL ensures type safety, reducing runtime errors and enhancing code reliability
 
 ## Installation
 
