@@ -3,7 +3,7 @@ import { Token, ParsedOperation, TokenType, ParsedQuery } from "../types";
 
 export class RestQLParser {
   private tokens: Token[] = [];
-  private pos: number = 0;
+  private pos = 0;
   private tokenizer: Tokenizer;
 
   constructor() {

@@ -11,7 +11,7 @@ export class QueryParser {
     let currentQuery: ParsedQuery | null = null;
     let depth = 0;
     let currentFields: any = {};
-    let fieldsStack: any[] = [];
+    const fieldsStack: any[] = [];
 
     for (const line of lines.slice(1)) {
       const trimmedLine = line.trim();

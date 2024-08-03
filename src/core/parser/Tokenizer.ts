@@ -2,8 +2,8 @@ import { ValidationError } from "../validation/errors";
 import { Token, TokenType } from "../types";
 
 export class Tokenizer {
-  private pos: number = 0;
-  private input: string = "";
+  private pos = 0;
+  private input = "";
 
   tokenize(input: string): Token[] {
     this.pos = 0;

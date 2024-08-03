@@ -4,7 +4,7 @@ export class BatchManager {
   private timer: number | null;
   private maxBatchSize: number;
 
-  constructor(batchInterval: number, maxBatchSize: number = Infinity) {
+  constructor(batchInterval: number, maxBatchSize = Infinity) {
     this.batchInterval = batchInterval;
     this.queue = {};
     this.timer = null;
