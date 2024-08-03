@@ -162,8 +162,29 @@ executeQuery();
 ### Mutations
 
 ```typescript
-const mutation = `
-  mutation CreateUser($name: String!, $email: String!) {
+const batchedMutations = `
+  mutation CreateUsers($name: String!, $email: String!) {
+    createUser(name: $name, email: $email) {
+      id
+      name
+      email
+      address {
+        street
+        city
+        country {
+          name
+          capital
+          blockList {
+            name
+            number
+          }
+        }
+      }
+      hobbyList {
+        name
+        id
+      }
+    }
     createUser(name: $name, email: $email) {
       id
       name
@@ -172,10 +193,10 @@ const mutation = `
   }
 `;
 
-async function createUser(name: string, email: string) {
+async function createUsers() {
   try {
-    const result = await restQL.execute(mutation, { name, email });
-    console.log('Created user:', result.createUser);
+    const result = await restQL.execute(batchedMutations, { name1: 'name_1', emai1: 'email_1', name2: 'name_2', email2: 'email_2' });
+    console.log('Created users:', result);
   } catch (error) {
     console.error('Error creating user:', error);
   }

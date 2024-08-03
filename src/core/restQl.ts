@@ -69,7 +69,7 @@ export class RestQL {
     operationString: string,
     variables: VariableValues = {},
     options: { useCache?: boolean } = {}
-  ): Promise<any> {
+  ): Promise<any | any[]> {
     const { useCache = true } = options;
     const parsedOperation = this.queryParser.parse(operationString);
 
@@ -170,8 +170,8 @@ export class RestQL {
   private async executeMutation(
     parsedOperation: ParsedOperation,
     variables: VariableValues
-  ): Promise<any> {
-    const results: any = {};
+  ): Promise<any[]> {
+    const results: any[] = [];
     const batchPromises: Promise<void>[] = [];
 
     for (const mutation of parsedOperation.queries) {
@@ -208,10 +208,7 @@ export class RestQL {
             resourceSchema
           );
 
-          results[mutation.queryName] = this.cherryPickFields(
-            shapedResult,
-            mutation.fields
-          );
+          results.push(this.cherryPickFields(shapedResult, mutation.fields));
         })
       );
     }

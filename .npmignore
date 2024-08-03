@@ -1,3 +1,7 @@
 example
 node_modules
 core
+src
+tsconfig.json
+.eslintrc.js
+.gitignore
