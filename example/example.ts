@@ -1,4 +1,4 @@
-import { RestQL } from "./rest-ql-v2";
+import { RestQL } from "rest-ql";
 
 const sdl = `
   type User {
@@ -127,8 +127,10 @@ const query = `
 // Execute the query
 async function executeQuery() {
   try {
-    const result = await restql.execute(query);
+    const result = await restql.execute(query, {}, { useCache: true });
     console.log("Query result:", result);
+    const resultcached = await restql.execute(query, {}, { useCache: true });
+    console.log("Query result cached:", resultcached);
   } catch (error) {
     console.error("Error executing query:", error);
   }

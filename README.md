@@ -110,8 +110,12 @@ const query = `
 // Execute the query
 async function executeQuery() {
   try {
-    const result = await restql.execute(query);
+    const result = await restql.execute(query, {}, { useCache: true });
     console.log("Query result:", result);
+
+    // Caching
+    const resultCached = await restql.execute(query, {}, { useCache: true });
+    console.log("Query result cached:", resultCached);
   } catch (error) {
     console.error("Error executing query:", error);
   }

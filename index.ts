@@ -63,12 +63,14 @@ export class RestQL {
 
   async execute(
     operationString: string,
-    variables: VariableValues = {}
+    variables: VariableValues = {},
+    options: { useCache?: boolean } = {}
   ): Promise<any> {
+    const { useCache = true } = options;
     const parsedOperation = this.queryParser.parse(operationString);
 
     if (parsedOperation.operationType === "query") {
-      return this.executeQuery(parsedOperation, variables);
+      return this.executeQuery(parsedOperation, variables, useCache);
     } else if (parsedOperation.operationType === "mutation") {
       return this.executeMutation(parsedOperation, variables);
     } else {
@@ -80,7 +82,8 @@ export class RestQL {
 
   private async executeQuery(
     parsedOperation: ParsedOperation,
-    variables: VariableValues
+    variables: VariableValues,
+    useCache: boolean
   ): Promise<any> {
     const results: any = {};
 
@@ -89,14 +92,24 @@ export class RestQL {
       if (!resourceSchema) {
         throw new Error(`Resource "${query.queryName}" not found in schema.`);
       }
-      const result = await this.executeQueryField(
-        query.queryName,
-        query.fields,
-        query.args,
-        variables,
-        resourceSchema
-      );
-      results[query.queryName] = result;
+
+      const cacheKey = this.getCacheKey(query.queryName, query.args, variables);
+      if (useCache && this.cacheManager.has(cacheKey)) {
+        results[query.queryName] = this.cacheManager.get(cacheKey);
+      } else {
+        const result = await this.executeQueryField(
+          query.queryName,
+          query.fields,
+          query.args,
+          variables,
+          resourceSchema
+        );
+        results[query.queryName] = result;
+
+        if (useCache) {
+          this.cacheManager.set(cacheKey, result);
+        }
+      }
     }
 
     return results;
@@ -150,7 +163,7 @@ export class RestQL {
   ): Promise<any> {
     const results: any = {};
 
-    for (const mutation of parsedOperation.queries) {
+    for (const mutation of parsedOperation.mutations) {
       const resolvedArgs = this.resolveVariables(mutation.args, variables);
       const result = await this.executor.execute(
         { ...mutation, args: resolvedArgs },
