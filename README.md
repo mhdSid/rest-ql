@@ -167,7 +167,16 @@ RestQL excels at mapping complex REST API responses to the structure defined in 
           "city": "test_city",
           "country": {
             "country_name": "test_country_name",
-            "capital_name": "test_capital"
+            "capital_name": "test_capital",
+            "blocks": [
+              [{
+                "block_name": "test_block_name_1",
+                "block_number": "test_block_number_1"
+              }, {
+                "block_name": "test_block_name_2",
+                "block_number": "test_block_number_2"
+              }]
+            ]
           }
         },
         "hobbies": [
