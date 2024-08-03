@@ -1,4 +1,4 @@
-import { RestQL } from "rest-ql";
+import { RestQL } from "../core/restQl";
 
 const sdl = `
   type User {

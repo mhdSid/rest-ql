@@ -39,6 +39,10 @@ const sdl = `
     hobbyList: [Hobby] @from("hobbies")
 
     @endpoint(GET, "/users", "data.data[0]")
+    @endpoint(POST, "/users", "data.data[0]")
+    @endpoint(PUT, "/users/{id}", "data.data[0]")
+    @endpoint(PATCH, "/users/{id}", "data.data[0]")
+    @endpoint(DELETE, "/users/{id}", "data")
   }
 
   type Post {
@@ -46,6 +50,10 @@ const sdl = `
     name: String @from("post_name")
 
     @endpoint(GET, "/posts", "data.data[0]")
+    @endpoint(POST, "/posts", "data.data[0]")
+    @endpoint(PUT, "/posts/{id}", "data.data[0]")
+    @endpoint(PATCH, "/posts/{id}", "data.data[0]")
+    @endpoint(DELETE, "/posts/{id}", "data")
   }
 
   type Address {

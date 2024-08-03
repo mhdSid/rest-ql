@@ -1,4 +1,4 @@
-import { RestQLParser } from "./Parser";
+import { RestQLParser } from "./parser/Parser";
 import {
   Schema,
   BaseUrls,
@@ -8,12 +8,14 @@ import {
   HttpMethod,
   ParsedQuery,
   SchemaResource,
+  ValueType,
 } from "./types";
-import { SDLParser } from "./SDLParser";
-import { CacheManager } from "./CacheManager";
-import { BatchManager } from "./BatchManager";
-import { RestQLExecutor } from "./RestQLExecutor";
-import { ValidationError, SchemaError } from "./errors";
+import { SDLParser } from "./parser/SDLParser";
+import { CacheManager } from "./cache/CacheManager";
+import { BatchManager } from "./batch/BatchManager";
+import { RestQLExecutor } from "./executor/RestQLExecutor";
+import { ValidationError } from "./validation/errors";
+import { SchemaValidator } from "./validation/SchemaValidator";
 
 export class RestQL {
   private schema: Schema;
@@ -25,6 +27,7 @@ export class RestQL {
   private batchManager: BatchManager;
   private executor: RestQLExecutor;
   private transformers: { [key: string]: Function };
+  private schemaValidator: SchemaValidator;
 
   constructor(
     sdl: string,
@@ -39,12 +42,15 @@ export class RestQL {
       maxRetries: 3,
       retryDelay: 1000,
       batchInterval: 50,
+      maxBatchSize: Infinity,
       ...options,
     };
+    this.schemaValidator = new SchemaValidator(transformers);
 
     this.sdlParser = new SDLParser(sdl);
     try {
       this.schema = this.sdlParser.parseSDL();
+      this.schemaValidator.validateSchema(this.schema);
     } catch (error) {
       throw error;
     }
@@ -57,8 +63,6 @@ export class RestQL {
     );
     this.executor = new RestQLExecutor(baseUrls, this.options.headers);
     this.transformers = transformers;
-
-    this.validateSchema(this.schema);
   }
 
   async execute(
@@ -86,6 +90,7 @@ export class RestQL {
     useCache: boolean
   ): Promise<any> {
     const results: any = {};
+    const batchPromises: Promise<void>[] = [];
 
     for (const query of parsedOperation.queries) {
       const resourceSchema = this.schema[query.queryName.toLowerCase()];
@@ -97,21 +102,26 @@ export class RestQL {
       if (useCache && this.cacheManager.has(cacheKey)) {
         results[query.queryName] = this.cacheManager.get(cacheKey);
       } else {
-        const result = await this.executeQueryField(
-          query.queryName,
-          query.fields,
-          query.args,
-          variables,
-          resourceSchema
-        );
-        results[query.queryName] = result;
+        batchPromises.push(
+          this.batchManager.add(query.queryName, async () => {
+            const result = await this.executeQueryField(
+              query.queryName,
+              query.fields,
+              query.args,
+              variables,
+              resourceSchema
+            );
+            results[query.queryName] = result;
 
-        if (useCache) {
-          this.cacheManager.set(cacheKey, result);
-        }
+            if (useCache) {
+              this.cacheManager.set(cacheKey, result);
+            }
+          })
+        );
       }
     }
 
+    await Promise.all(batchPromises);
     return results;
   }
 
@@ -162,31 +172,77 @@ export class RestQL {
     variables: VariableValues
   ): Promise<any> {
     const results: any = {};
+    const batchPromises: Promise<void>[] = [];
 
     for (const mutation of parsedOperation.queries) {
-      const resolvedArgs = this.resolveVariables(mutation.args, variables);
-      const result = await this.executor.execute(
-        { ...mutation, args: resolvedArgs },
-        this.schema[mutation.queryName],
-        variables,
-        HttpMethod.POST
-      );
-      const resourceSchema = this.schema[mutation.queryName];
-      const dataPath = resourceSchema.dataPath || "";
-      const extractedData = this.extractNestedValue(result, dataPath);
-      const shapedResult = this.shapeData(
-        extractedData,
-        mutation,
-        resourceSchema
-      );
+      batchPromises.push(
+        this.batchManager.add(mutation.queryName, async () => {
+          const [operationType, resourceName] = this.parseMutationType(
+            mutation.queryName
+          );
+          const resourceSchema = this.schema[resourceName.toLowerCase()];
+          if (!resourceSchema) {
+            throw new Error(`Resource "${resourceName}" not found in schema.`);
+          }
 
-      results[mutation.queryName] = this.cherryPickFields(
-        shapedResult,
-        mutation.fields
+          const method = this.getHttpMethodForOperation(operationType);
+          const endpoint = resourceSchema.endpoints[method];
+          if (!endpoint) {
+            throw new Error(
+              `${method} endpoint not found for resource "${resourceName}".`
+            );
+          }
+
+          const result = await this.executor.execute(
+            mutation,
+            resourceSchema,
+            variables,
+            method
+          );
+
+          const dataPath = resourceSchema.dataPath || "";
+          const extractedData = this.extractNestedValue(result, dataPath);
+          const shapedResult = this.shapeData(
+            extractedData,
+            mutation,
+            resourceSchema
+          );
+
+          results[mutation.queryName] = this.cherryPickFields(
+            shapedResult,
+            mutation.fields
+          );
+        })
       );
     }
 
+    await Promise.all(batchPromises);
     return results;
+  }
+
+  private parseMutationType(mutationName: string): [string, string] {
+    const operationTypes = ["create", "update", "patch", "delete"];
+    for (const opType of operationTypes) {
+      if (mutationName.toLowerCase().startsWith(opType)) {
+        return [opType, mutationName.slice(opType.length)];
+      }
+    }
+    throw new Error(`Unknown mutation type: ${mutationName}`);
+  }
+
+  private getHttpMethodForOperation(operationType: string): HttpMethod {
+    switch (operationType) {
+      case "create":
+        return HttpMethod.POST;
+      case "update":
+        return HttpMethod.PUT;
+      case "patch":
+        return HttpMethod.PATCH;
+      case "delete":
+        return HttpMethod.DELETE;
+      default:
+        throw new Error(`Unsupported operation type: ${operationType}`);
+    }
   }
 
   private shapeData(
@@ -205,7 +261,6 @@ export class RestQL {
         continue;
       }
 
-      // Extract raw value
       const rawValue = this.extractNestedValue(
         data,
         fieldSchema.from || fieldName
@@ -214,7 +269,6 @@ export class RestQL {
       let shapedFieldValue;
 
       if (typeof fieldValue === "object" && fieldValue !== null) {
-        // Handle nested objects and arrays
         if (Array.isArray(rawValue)) {
           const itemType = fieldSchema.type.replace(/[\[\]]/g, "");
           const itemSchema = this.schema._types[itemType];
@@ -225,7 +279,6 @@ export class RestQL {
             fieldSchema.type
           );
         } else {
-          // For nested objects, use the type from the schema to get the correct nested schema
           const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
           const nestedSchema = this.schema._types[nestedType];
           if (nestedSchema) {
@@ -243,11 +296,7 @@ export class RestQL {
         shapedFieldValue = rawValue;
       }
 
-      // Apply field-level transformer if defined
       if (fieldSchema.transform && this.transformers[fieldSchema.transform]) {
-        console.log(
-          `Applying transformer ${fieldSchema.transform} to field ${fieldName}`
-        );
         shapedData[fieldName] = this.transformers[fieldSchema.transform](data, {
           [fieldName]: shapedFieldValue,
         })[fieldName];
@@ -256,7 +305,6 @@ export class RestQL {
       }
     }
 
-    // Apply resource-level transformer if defined
     if (
       "transform" in resourceSchema &&
       resourceSchema.transform &&
@@ -317,7 +365,7 @@ export class RestQL {
 
   private extractNestedValue(data: any, path: string): any {
     return path.split(".").reduce((acc, part) => {
-      if (acc == null) return undefined; // Safeguard against undefined intermediate values
+      if (acc == null) return undefined;
 
       if (part.includes("[") && part.includes("]")) {
         const [arrayName, indexStr] = part.split("[");
@@ -354,56 +402,5 @@ export class RestQL {
       }
     }
     return resolved;
-  }
-
-  private validateSchema(schema: Schema): void {
-    if (typeof schema !== "object" || schema === null) {
-      throw new SchemaError("Schema must be a non-null object");
-    }
-
-    for (const [resourceName, resource] of Object.entries(schema)) {
-      if (resourceName === "_types") continue;
-      this.validateSchemaResource(resourceName, resource);
-    }
-  }
-
-  private validateSchemaResource(
-    resourceName: string,
-    resource: SchemaResource
-  ): void {
-    if (typeof resource !== "object" || resource === null) {
-      throw new SchemaError(
-        `Resource ${resourceName} must be a non-null object`
-      );
-    }
-
-    if (typeof resource.fields !== "object" || resource.fields === null) {
-      throw new SchemaError(
-        `Fields for resource ${resourceName} must be an object`
-      );
-    }
-
-    if (typeof resource.endpoints !== "object" || resource.endpoints === null) {
-      throw new SchemaError(
-        `Endpoints for resource ${resourceName} must be an object`
-      );
-    }
-
-    for (const [method, endpoint] of Object.entries(resource.endpoints)) {
-      if (typeof endpoint.path !== "string") {
-        throw new SchemaError(
-          `Path for ${method} endpoint in resource ${resourceName} must be a string`
-        );
-      }
-    }
-
-    if (
-      resource.transform &&
-      typeof this.transformers[resource.transform] !== "function"
-    ) {
-      throw new SchemaError(
-        `Transformer ${resource.transform} for resource ${resourceName} is not defined`
-      );
-    }
   }
 }

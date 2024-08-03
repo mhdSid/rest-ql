@@ -1,5 +1,5 @@
-import { Tokenizer } from "./Tokenizer";
-import { Token, ParsedOperation, TokenType, ParsedQuery } from "./types";
+import { Tokenizer } from "../parser/Tokenizer";
+import { Token, ParsedOperation, TokenType, ParsedQuery } from "../types";
 
 export class RestQLParser {
   private tokens: Token[] = [];

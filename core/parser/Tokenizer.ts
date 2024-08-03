@@ -1,5 +1,5 @@
-import { ValidationError } from "./errors";
-import { Token, TokenType } from "./types";
+import { ValidationError } from "../validation/errors";
+import { Token, TokenType } from "../types";
 
 export class Tokenizer {
   private pos: number = 0;

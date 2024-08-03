@@ -29,13 +29,17 @@ export class BatchManager {
       if (this.queue[key].length >= this.maxBatchSize) {
         this.executeBatch(key);
       } else if (!this.timer) {
-        this.timer = window.setTimeout(() => this.executeBatch(), this.batchInterval);
+        this.timer = setTimeout(() => this.executeBatch(), this.batchInterval);
       }
     });
   }
 
   private async executeBatch(specificKey?: string): Promise<void> {
-    this.timer = null;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    
     const keys = specificKey ? [specificKey] : Object.keys(this.queue);
 
     for (const key of keys) {
@@ -43,21 +47,21 @@ export class BatchManager {
       delete this.queue[key];
 
       try {
-        await Promise.all(operations.map(op => op()));
+        await Promise.all(operations.map((op) => op()));
       } catch (error) {
         console.error(`Batch execution error for key ${key}:`, error);
       }
     }
 
     if (Object.keys(this.queue).length > 0) {
-      this.timer = window.setTimeout(() => this.executeBatch(), this.batchInterval);
+      this.timer = setTimeout(() => this.executeBatch(), this.batchInterval);
     }
   }
 
   cancel(key: string): void {
     delete this.queue[key];
     if (Object.keys(this.queue).length === 0 && this.timer) {
-      window.clearTimeout(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }

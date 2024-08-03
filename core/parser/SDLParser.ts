@@ -5,7 +5,7 @@ import {
   SchemaField,
   Endpoint,
   HttpMethod,
-} from "./types";
+} from "../types";
 
 export class SDLParser {
   private input: string;
