@@ -15,13 +15,13 @@ It provides a seamless way to interact with REST endpoints, offering features li
 ## Installation
 
 ```bash
-npm install restql
+npm install lib-restql
 ```
 
 or
 
 ```bash
-yarn add restql
+yarn add lib-restql
 ```
 
 ## Schema Definition Language (SDL)
@@ -172,7 +172,7 @@ const result = await restql.execute(queryString, variables, options);
 ## Quick Start
 
 ```typescript
-import { RestQL } from "rest-ql";
+import { RestQL } from "lib-restql";
 
 // Define the SDL
 const sdl = `
