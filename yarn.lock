@@ -874,6 +874,7 @@ __metadata:
     "@typescript-eslint/eslint-plugin": "npm:^5.6.0"
     "@typescript-eslint/parser": "npm:^5.6.0"
     eslint: "npm:^8.4.1"
+    lodash.get: "npm:4.4.2"
     node-fetch: "npm:^3.2.0"
     typescript: "npm:^4.5.3"
   languageName: unknown
@@ -885,6 +886,13 @@ __metadata:
   dependencies:
     p-locate: "npm:^5.0.0"
   checksum: d3972ab70dfe58ce620e64265f90162d247e87159b6126b01314dd67be43d50e96a50b517bce2d9452a79409c7614054c277b5232377de50416564a77ac7aad3
+  languageName: node
+  linkType: hard
+
+"lodash.get@npm:4.4.2":
+  version: 4.4.2
+  resolution: "lodash.get@npm:4.4.2"
+  checksum: 48f40d471a1654397ed41685495acb31498d5ed696185ac8973daef424a749ca0c7871bf7b665d5c14f5cc479394479e0307e781f61d5573831769593411be6e
   languageName: node
   linkType: hard
 

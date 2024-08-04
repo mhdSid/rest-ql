@@ -16,6 +16,7 @@ import { BatchManager } from "./batch/BatchManager";
 import { RestQLExecutor } from "./executor/RestQLExecutor";
 import { ValidationError } from "./validation/errors";
 import { SchemaValidator } from "./validation/SchemaValidator";
+import lodashGet from "lodash.get";
 
 export class RestQL {
   private schema: Schema;
@@ -28,12 +29,14 @@ export class RestQL {
   private executor: RestQLExecutor;
   private transformers: { [key: string]: Function };
   private schemaValidator: SchemaValidator;
+  private debugMode: boolean;
 
   constructor(
     sdl: string,
     baseUrls: BaseUrls,
     options: RestQLOptions = {},
-    transformers: { [key: string]: Function } = {}
+    transformers: { [key: string]: Function } = {},
+    debugMode: boolean = false
   ) {
     this.baseUrls = baseUrls;
     this.options = {
@@ -46,10 +49,12 @@ export class RestQL {
       ...options,
     };
     this.schemaValidator = new SchemaValidator(transformers);
+    this.debugMode = debugMode;
 
     this.sdlParser = new SDLParser(sdl);
     try {
       this.schema = this.sdlParser.parseSDL();
+      console.log("this.schema: ", this.schema);
       this.schemaValidator.validateSchema(this.schema);
     } catch (error) {
       throw error;
@@ -63,6 +68,12 @@ export class RestQL {
     );
     this.executor = new RestQLExecutor(baseUrls, this.options.headers);
     this.transformers = transformers;
+  }
+
+  private log(...args: any[]) {
+    if (this.debugMode) {
+      console.log(...args);
+    }
   }
 
   async execute(
@@ -151,14 +162,20 @@ export class RestQL {
         HttpMethod.GET
       );
 
+      this.log("Raw result:", result);
+
       const dataPath = resourceSchema.dataPath || "";
       const extractedData = this.extractNestedValue(result, dataPath);
+
+      this.log("Extracted data:", extractedData);
 
       const shapedResult = this.shapeData(
         extractedData,
         { fields },
         resourceSchema
       );
+
+      this.log("Shaped result:", shapedResult);
 
       return shapedResult;
     } catch (error) {
@@ -240,6 +257,13 @@ export class RestQL {
       default:
         throw new Error(`Unsupported operation type: ${operationType}`);
     }
+  }
+
+  private extractNestedValue(data: any, path: string): any {
+    this.log("Extracting nested value for path:", path);
+    const value = lodashGet(data, path);
+    this.log("Extracted value:", value);
+    return value;
   }
 
   private shapeData(
@@ -358,19 +382,6 @@ export class RestQL {
     }
 
     return result;
-  }
-
-  private extractNestedValue(data: any, path: string): any {
-    return path.split(".").reduce((acc, part) => {
-      if (acc == null) return undefined;
-
-      if (part.includes("[") && part.includes("]")) {
-        const [arrayName, indexStr] = part.split("[");
-        const index = parseInt(indexStr.replace("]", ""), 10);
-        return acc && acc[arrayName] && acc[arrayName][index];
-      }
-      return acc && acc[part];
-    }, data);
   }
 
   private getCacheKey(
