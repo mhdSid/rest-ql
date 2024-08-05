@@ -12,35 +12,39 @@ export class RestQLExecutor {
     this.baseUrls = baseUrls;
     this.headers = headers;
   }
-
   async execute(parsedQuery, resourceSchema, variables, method): Promise<any> {
     const endpoint = resourceSchema.endpoints[method];
     if (!endpoint) {
-      throw new Error(`${method} endpoint not found for resource "${parsedQuery.queryName}".`);
+      console.error(
+        `${method} endpoint not found for resource "${parsedQuery.queryName}".`
+      );
+      throw new Error(
+        `${method} endpoint not found for resource "${parsedQuery.queryName}".`
+      );
     }
-  
+
     const url = this.buildUrl(endpoint.path, variables);
+
     const response = await this.fetch(url, method, parsedQuery.args);
     const data = await response.json();
-  
     return data;
   }
-  
+
   private buildUrl(path: string, variables: { [key: string]: string }): string {
     let url = this.baseUrls[path] || this.baseUrls.default;
-    url += path.replace(/{(\w+)}/g, (_, key) => variables[key] || '');
-  
+    url += path.replace(/{(\w+)}/g, (_, key) => variables[key] || "");
+
     const queryParams = new URLSearchParams();
     for (const [key, value] of Object.entries(variables)) {
       if (!path.includes(`{${key}}`)) {
         queryParams.append(key, value);
       }
     }
-  
+
     if (queryParams.toString()) {
       url += `?${queryParams.toString()}`;
     }
-  
+
     return url;
   }
 

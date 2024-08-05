@@ -54,7 +54,6 @@ export class RestQL {
     this.sdlParser = new SDLParser(sdl);
     try {
       this.schema = this.sdlParser.parseSDL();
-      console.log("this.schema: ", this.schema);
       this.schemaValidator.validateSchema(this.schema);
     } catch (error) {
       throw error;
@@ -136,54 +135,6 @@ export class RestQL {
     return results;
   }
 
-  private async executeQueryField(
-    fieldName: string,
-    fields: any,
-    args: any,
-    variables: VariableValues,
-    resourceSchema: SchemaResource
-  ): Promise<any> {
-    if (!resourceSchema.endpoints) {
-      throw new Error(`No endpoints defined for resource "${fieldName}".`);
-    }
-
-    if (!resourceSchema.endpoints.GET) {
-      throw new Error(`GET endpoint not found for resource "${fieldName}".`);
-    }
-
-    const endpoint = resourceSchema.endpoints.GET;
-    const resolvedArgs = this.resolveVariables(args, variables);
-
-    try {
-      const result = await this.executor.execute(
-        { queryName: fieldName, fields, args: resolvedArgs },
-        resourceSchema,
-        variables,
-        HttpMethod.GET
-      );
-
-      this.log("Raw result:", result);
-
-      const dataPath = resourceSchema.dataPath || "";
-      const extractedData = this.extractNestedValue(result, dataPath);
-
-      this.log("Extracted data:", extractedData);
-
-      const shapedResult = this.shapeData(
-        extractedData,
-        { fields },
-        resourceSchema
-      );
-
-      this.log("Shaped result:", shapedResult);
-
-      return shapedResult;
-    } catch (error) {
-      console.error(`Error executing query for ${fieldName}:`, error);
-      throw error;
-    }
-  }
-
   private async executeMutation(
     parsedOperation: ParsedOperation,
     variables: VariableValues
@@ -259,18 +210,79 @@ export class RestQL {
     }
   }
 
-  private extractNestedValue(data: any, path: string): any {
-    this.log("Extracting nested value for path:", path);
-    const value = lodashGet(data, path);
-    this.log("Extracted value:", value);
-    return value;
+  private async executeQueryField(
+    fieldName: string,
+    fields: any,
+    args: any,
+    variables: VariableValues,
+    resourceSchema: SchemaResource
+  ): Promise<any> {
+    if (!resourceSchema.endpoints) {
+      console.error(`No endpoints defined for resource "${fieldName}".`);
+      throw new Error(`No endpoints defined for resource "${fieldName}".`);
+    }
+
+    if (!resourceSchema.endpoints.GET) {
+      console.error(`GET endpoint not found for resource "${fieldName}".`);
+      throw new Error(`GET endpoint not found for resource "${fieldName}".`);
+    }
+
+    const endpoint = resourceSchema.endpoints.GET;
+    const resolvedArgs = this.resolveVariables(args, variables);
+
+    try {
+      const result = await this.executor.execute(
+        { queryName: fieldName, fields, args: resolvedArgs },
+        resourceSchema,
+        variables,
+        HttpMethod.GET
+      );
+
+      const dataPath = resourceSchema.dataPath || "";
+      let extractedData = this.extractNestedValue(result, dataPath);
+
+      // Handle nested resources
+      for (const [nestedFieldName, nestedFieldValue] of Object.entries(
+        fields
+      )) {
+        const nestedFieldSchema = resourceSchema.fields[nestedFieldName];
+        if (nestedFieldSchema && nestedFieldSchema.isResource) {
+          const nestedResourceSchema =
+            this.schema[nestedFieldSchema.type.toLowerCase()];
+          if (nestedResourceSchema) {
+            const nestedResult = await this.executeQueryField(
+              nestedFieldName,
+              nestedFieldValue,
+              {},
+              variables,
+              nestedResourceSchema
+            );
+            extractedData[nestedFieldName] = nestedResult;
+          } else {
+            console.error(
+              `Schema not found for nested resource: ${nestedFieldName}`
+            );
+          }
+        }
+      }
+
+      const shapedResult = this.shapeData(
+        extractedData,
+        { fields },
+        resourceSchema
+      );
+      return shapedResult;
+    } catch (error) {
+      console.error(`Error executing query for ${fieldName}:`, error);
+      throw error;
+    }
   }
 
-  private shapeData(
+  private async shapeData(
     data: any,
     query: ParsedQuery,
     resourceSchema: SchemaResource | ValueType
-  ): any {
+  ): Promise<any> {
     const shapedData: any = {};
 
     for (const [fieldName, fieldValue] of Object.entries(query.fields)) {
@@ -282,47 +294,75 @@ export class RestQL {
         continue;
       }
 
-      const rawValue = this.extractNestedValue(
-        data,
-        fieldSchema.from || fieldName
-      );
+      const fromPath = fieldSchema.from || fieldName;
+      let rawValue = this.extractNestedValue(data, fromPath);
 
-      let shapedFieldValue;
-
-      if (typeof fieldValue === "object" && fieldValue !== null) {
+      if (
+        fieldSchema.isResource ||
+        this.schema[fieldSchema.type.toLowerCase()]
+      ) {
+        const nestedResourceSchema =
+          this.schema[fieldSchema.type.toLowerCase()];
+        if (nestedResourceSchema) {
+          if (rawValue === undefined) {
+            try {
+              rawValue = await this.executeQueryField(
+                fieldName,
+                fieldValue as any,
+                {},
+                {},
+                nestedResourceSchema as SchemaResource
+              );
+            } catch (error) {
+              console.error(
+                `Error fetching nested resource ${fieldName}:`,
+                error
+              );
+              rawValue = null;
+            }
+          }
+          if (rawValue !== null) {
+            // Directly assign the fetched and shaped nested resource data
+            shapedData[fieldName] = rawValue;
+          }
+        }
+      } else if (typeof fieldValue === "object" && fieldValue !== null) {
         if (Array.isArray(rawValue)) {
           const itemType = fieldSchema.type.replace(/[\[\]]/g, "");
           const itemSchema = this.schema._types[itemType];
-          shapedFieldValue = this.shapeNestedArrays(
-            rawValue,
-            fieldValue,
-            itemSchema,
-            fieldSchema.type
+          rawValue = await Promise.all(
+            rawValue.map(async (item) =>
+              this.shapeData(item, { fields: fieldValue as any }, itemSchema)
+            )
           );
         } else {
           const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
           const nestedSchema = this.schema._types[nestedType];
           if (nestedSchema) {
-            shapedFieldValue = this.shapeData(
+            rawValue = await this.shapeData(
               rawValue,
-              { fields: fieldValue },
+              { fields: fieldValue as any },
               nestedSchema
             );
           } else {
-            console.warn(`Schema for nested type ${nestedType} not found`);
-            shapedFieldValue = rawValue;
+            console.warn(`Schema not found for nested type: ${nestedType}`);
           }
         }
-      } else {
-        shapedFieldValue = rawValue;
       }
 
       if (fieldSchema.transform && this.transformers[fieldSchema.transform]) {
-        shapedData[fieldName] = this.transformers[fieldSchema.transform](data, {
-          [fieldName]: shapedFieldValue,
-        })[fieldName];
-      } else {
-        shapedData[fieldName] = shapedFieldValue;
+        const transformedValue = this.transformers[fieldSchema.transform](
+          data,
+          {
+            [fieldName]: rawValue,
+          }
+        )[fieldName];
+        shapedData[fieldName] = transformedValue;
+      } else if (
+        !(fieldSchema.isResource || this.schema[fieldSchema.type.toLowerCase()])
+      ) {
+        // Only assign rawValue for non-nested resources
+        shapedData[fieldName] = rawValue;
       }
     }
 
@@ -331,10 +371,19 @@ export class RestQL {
       resourceSchema.transform &&
       this.transformers[resourceSchema.transform]
     ) {
-      return this.transformers[resourceSchema.transform](data, shapedData);
+      const finalTransformedData = this.transformers[resourceSchema.transform](
+        data,
+        shapedData
+      );
+      return finalTransformedData;
     }
 
     return shapedData;
+  }
+
+  private extractNestedValue(data: any, path: string): any {
+    const value = lodashGet(data, path);
+    return value;
   }
 
   private shapeNestedArrays(
@@ -346,11 +395,12 @@ export class RestQL {
     const nestedLevel = (fieldType.match(/\[/g) || []).length;
 
     if (nestedLevel === 1) {
-      return rawValue.map((item) =>
+      const shapedArray = rawValue.map((item) =>
         this.shapeData(item, { fields: fieldValue }, itemSchema)
       );
+      return shapedArray;
     } else {
-      return rawValue.map((item) =>
+      const shapedArray = rawValue.map((item) =>
         this.shapeNestedArrays(
           item,
           fieldValue,
@@ -358,6 +408,7 @@ export class RestQL {
           fieldType.slice(1, -1)
         )
       );
+      return shapedArray;
     }
   }
 

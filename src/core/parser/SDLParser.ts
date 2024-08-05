@@ -36,8 +36,6 @@ export class SDLParser {
       }
       return this.schema;
     } catch (error) {
-      console.error("Error parsing SDL:", error);
-      console.error("Context:", this.getErrorContext());
       throw error;
     }
   }
@@ -64,7 +62,7 @@ export class SDLParser {
     ) {
       this.schema[typeName.toLowerCase()] = this.currentType as SchemaResource;
     } else {
-      if (Object.keys(this.currentType.endpoints).length === 0) {
+      if ("endpoints" in this.currentType) {
         delete (this.currentType as any).endpoints;
       }
       this.schema._types[typeName] = this.currentType as ValueType;
@@ -92,6 +90,7 @@ export class SDLParser {
 
   private parseField(): void {
     const fieldName = this.parseIdentifier();
+
     this.consumeWhitespace();
     this.consumeToken(":");
     this.consumeWhitespace();
@@ -107,6 +106,11 @@ export class SDLParser {
       } else if (directive.type === "transform") {
         field.transform = directive.value;
       }
+    }
+
+    // Check if the field type is a reference to another resource
+    if (this.schema._types[fieldType] || this.schema[fieldType.toLowerCase()]) {
+      field.isResource = true;
     }
 
     if (this.currentType) {

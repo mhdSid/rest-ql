@@ -1,4 +1,4 @@
-import { ParsedOperation, ParsedQuery } from '../types'
+import { ParsedOperation, ParsedQuery } from "../types";
 
 export class QueryParser {
   parse(query: string): ParsedOperation {
