@@ -241,6 +241,15 @@ export class RestQL {
       const dataPath = resourceSchema.dataPath || "";
       let extractedData = this.extractNestedValue(result, dataPath);
 
+      // Handle the case where extractedData is an array (for top-level fields like Post)
+      if (Array.isArray(extractedData)) {
+        return Promise.all(
+          extractedData.map((item) =>
+            this.shapeData(item, { fields }, resourceSchema)
+          )
+        );
+      }
+
       // Handle nested resources
       for (const [nestedFieldName, nestedFieldValue] of Object.entries(
         fields
@@ -255,7 +264,7 @@ export class RestQL {
               nestedFieldValue,
               {},
               variables,
-              nestedResourceSchema
+              nestedResourceSchema as SchemaResource
             );
             extractedData[nestedFieldName] = nestedResult;
           } else {
@@ -283,6 +292,13 @@ export class RestQL {
     query: ParsedQuery,
     resourceSchema: SchemaResource | ValueType
   ): Promise<any> {
+    // If data is an array, map over it and shape each item
+    if (Array.isArray(data)) {
+      return Promise.all(
+        data.map((item) => this.shapeData(item, query, resourceSchema))
+      );
+    }
+
     const shapedData: any = {};
 
     for (const [fieldName, fieldValue] of Object.entries(query.fields)) {
@@ -322,31 +338,20 @@ export class RestQL {
             }
           }
           if (rawValue !== null) {
-            // Directly assign the fetched and shaped nested resource data
             shapedData[fieldName] = rawValue;
           }
         }
       } else if (typeof fieldValue === "object" && fieldValue !== null) {
-        if (Array.isArray(rawValue)) {
-          const itemType = fieldSchema.type.replace(/[\[\]]/g, "");
-          const itemSchema = this.schema._types[itemType];
-          rawValue = await Promise.all(
-            rawValue.map(async (item) =>
-              this.shapeData(item, { fields: fieldValue as any }, itemSchema)
-            )
+        const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
+        const nestedSchema = this.schema._types[nestedType];
+        if (nestedSchema) {
+          rawValue = await this.shapeData(
+            rawValue,
+            { fields: fieldValue as any },
+            nestedSchema
           );
         } else {
-          const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
-          const nestedSchema = this.schema._types[nestedType];
-          if (nestedSchema) {
-            rawValue = await this.shapeData(
-              rawValue,
-              { fields: fieldValue as any },
-              nestedSchema
-            );
-          } else {
-            console.warn(`Schema not found for nested type: ${nestedType}`);
-          }
+          console.warn(`Schema not found for nested type: ${nestedType}`);
         }
       }
 
@@ -361,7 +366,6 @@ export class RestQL {
       } else if (
         !(fieldSchema.isResource || this.schema[fieldSchema.type.toLowerCase()])
       ) {
-        // Only assign rawValue for non-nested resources
         shapedData[fieldName] = rawValue;
       }
     }
