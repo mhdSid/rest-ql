@@ -77,17 +77,16 @@ export class RestQL {
 
   async execute(
     operationString: string,
-    variables: VariableValues = {},
+    variables: { [key: string]: any } = {},
     options: { useCache?: boolean } = {}
   ): Promise<any | any[]> {
-    const { useCache = true } = options;
     const parsedOperation = this.queryParser.parse(operationString);
 
     if (parsedOperation.operationType === "query") {
       const result = await this.executeQuery(
         parsedOperation,
         variables,
-        useCache
+        options.useCache ?? true
       );
       return result.shapedData;
     } else if (parsedOperation.operationType === "mutation") {
@@ -223,13 +222,13 @@ export class RestQL {
     data: any,
     query: ParsedQuery,
     resourceSchema: SchemaResource | ValueType,
+    variables: VariableValues,
     rawResponses: { [key: string]: any } = {}
   ): Promise<any> {
-    // If data is an array, map over it and shape each item
     if (Array.isArray(data)) {
       return Promise.all(
         data.map((item) =>
-          this.shapeData(item, query, resourceSchema, rawResponses)
+          this.shapeData(item, query, resourceSchema, variables, rawResponses)
         )
       );
     }
@@ -237,10 +236,10 @@ export class RestQL {
     const shapedData: any = {};
 
     for (const [fieldName, fieldValue] of Object.entries(query.fields)) {
-      const fieldSchema = resourceSchema.fields[fieldName];
+      const fieldSchema = resourceSchema.fields?.[fieldName];
       if (!fieldSchema) {
         console.warn(
-          `Field schema for "${fieldName}" not found in resource schema.`
+          `Field schema for "${fieldName}" not found in resource schema. Skipping.`
         );
         continue;
       }
@@ -255,37 +254,33 @@ export class RestQL {
         const nestedResourceSchema =
           this.schema[fieldSchema.type.toLowerCase()];
         if (nestedResourceSchema) {
-          if (rawValue === undefined) {
-            try {
-              const nestedResult = await this.executeQueryField(
-                fieldName,
-                fieldValue as any,
-                {},
-                {},
-                nestedResourceSchema as SchemaResource
-              );
-              rawValue = nestedResult.shapedData;
-              rawResponses[fieldName] = nestedResult.rawResponse;
-            } catch (error) {
-              console.error(
-                `Error fetching nested resource ${fieldName}:`,
-                error
-              );
-              rawValue = null;
-            }
-          }
-          if (rawValue !== null) {
-            shapedData[fieldName] = rawValue;
+          try {
+            const nestedResult = await this.executeQueryField(
+              fieldName,
+              fieldValue.fields,
+              fieldValue.args || {},
+              variables,
+              nestedResourceSchema as SchemaResource
+            );
+            rawValue = nestedResult.shapedData;
+            rawResponses[fieldName] = nestedResult.rawResponse;
+          } catch (error) {
+            console.error(
+              `Error fetching nested resource ${fieldName}:`,
+              error
+            );
+            rawValue = null;
           }
         }
-      } else if (typeof fieldValue === "object" && fieldValue !== null) {
+      } else if (typeof fieldValue === "object" && fieldValue.fields) {
         const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
         const nestedSchema = this.schema._types[nestedType];
         if (nestedSchema) {
           const nestedResult = await this.shapeData(
             rawValue,
-            { fields: fieldValue as any },
+            { fields: fieldValue.fields },
             nestedSchema,
+            variables,
             rawResponses
           );
           rawValue = nestedResult;
@@ -300,12 +295,10 @@ export class RestQL {
           {
             [fieldName]: rawValue,
           },
-          rawResponses // Pass all accumulated raw responses
+          rawResponses
         );
         shapedData[fieldName] = transformedValue;
-      } else if (
-        !(fieldSchema.isResource || this.schema[fieldSchema.type.toLowerCase()])
-      ) {
+      } else {
         shapedData[fieldName] = rawValue;
       }
     }
@@ -318,7 +311,7 @@ export class RestQL {
       const finalTransformedData = this.transformers[resourceSchema.transform](
         data,
         shapedData,
-        rawResponses // Pass all accumulated raw responses
+        rawResponses
       );
       return finalTransformedData;
     }
@@ -357,47 +350,11 @@ export class RestQL {
       const dataPath = resourceSchema.dataPath || "";
       let extractedData = this.extractNestedValue(result, dataPath);
 
-      // Handle the case where extractedData is an array (for top-level fields)
-      if (Array.isArray(extractedData)) {
-        const shapedArray = await Promise.all(
-          extractedData.map((item) =>
-            this.shapeData(item, { fields }, resourceSchema, {
-              [fieldName]: result,
-            })
-          )
-        );
-        return { shapedData: shapedArray, rawResponse: result };
-      }
-
-      // Handle nested resources
-      for (const [nestedFieldName, nestedFieldValue] of Object.entries(
-        fields
-      )) {
-        const nestedFieldSchema = resourceSchema.fields[nestedFieldName];
-        if (nestedFieldSchema && nestedFieldSchema.isResource) {
-          const nestedResourceSchema =
-            this.schema[nestedFieldSchema.type.toLowerCase()];
-          if (nestedResourceSchema) {
-            const nestedResult = await this.executeQueryField(
-              nestedFieldName,
-              nestedFieldValue,
-              {},
-              variables,
-              nestedResourceSchema as SchemaResource
-            );
-            extractedData[nestedFieldName] = nestedResult.shapedData;
-          } else {
-            console.error(
-              `Schema not found for nested resource: ${nestedFieldName}`
-            );
-          }
-        }
-      }
-
       const shapedResult = await this.shapeData(
         extractedData,
         { fields },
         resourceSchema,
+        variables,
         { [fieldName]: result }
       );
       return { shapedData: shapedResult, rawResponse: result };
@@ -472,7 +429,7 @@ export class RestQL {
 
   private resolveVariables(
     args: { [key: string]: string },
-    variables: VariableValues
+    variables: { [key: string]: any }
   ): { [key: string]: any } {
     const resolved: { [key: string]: any } = {};
     for (const [key, value] of Object.entries(args)) {

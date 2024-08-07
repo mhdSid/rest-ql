@@ -56,18 +56,6 @@ export class RestQLParser {
     return variables;
   }
 
-  private parseQueries(): ParsedQuery[] {
-    const queries: ParsedQuery[] = [];
-    this.consumeToken(TokenType.LEFT_BRACE);
-
-    while (this.peek().type !== TokenType.RIGHT_BRACE) {
-      queries.push(this.parseQuery());
-    }
-
-    this.consumeToken(TokenType.RIGHT_BRACE);
-    return queries;
-  }
-
   private parseQuery(): ParsedQuery {
     const queryName = this.consumeToken(TokenType.IDENTIFIER).value;
     let args: { [key: string]: string } = {};
@@ -79,6 +67,51 @@ export class RestQLParser {
     const fields = this.parseFields();
 
     return { queryName, args, fields };
+  }
+
+  private parseFields(): { [key: string]: any } {
+    const fields: { [key: string]: any } = {};
+    this.consumeToken(TokenType.LEFT_BRACE);
+
+    while (this.peek().type !== TokenType.RIGHT_BRACE) {
+      const fieldName = this.consumeToken(TokenType.IDENTIFIER).value;
+
+      let fieldArgs = {};
+      if (this.peek().type === TokenType.LEFT_PAREN) {
+        fieldArgs = this.parseArguments();
+      }
+
+      if (this.peek().type === TokenType.LEFT_BRACE) {
+        fields[fieldName] = {
+          args: fieldArgs,
+          fields: this.parseFields(),
+        };
+      } else {
+        fields[fieldName] = {
+          args: fieldArgs,
+          value: true,
+        };
+      }
+
+      if (this.peek().type === TokenType.COMMA) {
+        this.consumeToken(TokenType.COMMA);
+      }
+    }
+
+    this.consumeToken(TokenType.RIGHT_BRACE);
+    return fields;
+  }
+
+  private parseQueries(): ParsedQuery[] {
+    const queries: ParsedQuery[] = [];
+    this.consumeToken(TokenType.LEFT_BRACE);
+
+    while (this.peek().type !== TokenType.RIGHT_BRACE) {
+      queries.push(this.parseQuery());
+    }
+
+    this.consumeToken(TokenType.RIGHT_BRACE);
+    return queries;
   }
 
   private parseArguments(): { [key: string]: string } {
@@ -98,28 +131,6 @@ export class RestQLParser {
 
     this.consumeToken(TokenType.RIGHT_PAREN);
     return args;
-  }
-
-  private parseFields(): { [key: string]: any } {
-    const fields: { [key: string]: any } = {};
-    this.consumeToken(TokenType.LEFT_BRACE);
-
-    while (this.peek().type !== TokenType.RIGHT_BRACE) {
-      const fieldName = this.consumeToken(TokenType.IDENTIFIER).value;
-
-      if (this.peek().type === TokenType.LEFT_BRACE) {
-        fields[fieldName] = this.parseFields();
-      } else {
-        fields[fieldName] = true;
-      }
-
-      if (this.peek().type === TokenType.COMMA) {
-        this.consumeToken(TokenType.COMMA);
-      }
-    }
-
-    this.consumeToken(TokenType.RIGHT_BRACE);
-    return fields;
   }
 
   private parseValue(): string {

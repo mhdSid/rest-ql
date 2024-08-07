@@ -12,7 +12,13 @@ export class RestQLExecutor {
     this.baseUrls = baseUrls;
     this.headers = headers;
   }
-  async execute(parsedQuery, resourceSchema, variables, method): Promise<any> {
+
+  async execute(
+    parsedQuery,
+    resourceSchema,
+    variables: { [key: string]: any },
+    method
+  ): Promise<any> {
     const endpoint = resourceSchema.endpoints[method];
     if (!endpoint) {
       console.error(
@@ -25,7 +31,17 @@ export class RestQLExecutor {
 
     const url = this.buildUrl(endpoint.path, variables);
 
-    const response = await this.fetch(url, method, parsedQuery.args);
+    const queryArgs = {};
+    for (const [key, value] of Object.entries(parsedQuery.args)) {
+      if (typeof value === "string" && value.startsWith("$")) {
+        const varName = value.slice(1);
+        queryArgs[key] = variables[varName];
+      } else {
+        queryArgs[key] = value;
+      }
+    }
+
+    const response = await this.fetch(url, method, queryArgs);
     const data = await response.json();
     return data;
   }
@@ -33,25 +49,13 @@ export class RestQLExecutor {
   private buildUrl(path: string, variables: { [key: string]: string }): string {
     let url = this.baseUrls[path] || this.baseUrls.default;
     url += path.replace(/{(\w+)}/g, (_, key) => variables[key] || "");
-
-    const queryParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(variables)) {
-      if (!path.includes(`{${key}}`)) {
-        queryParams.append(key, value);
-      }
-    }
-
-    if (queryParams.toString()) {
-      url += `?${queryParams.toString()}`;
-    }
-
     return url;
   }
 
   private async fetch(
     url: string,
     method: HttpMethod,
-    body?: any
+    queryArgs: any
   ): Promise<Response> {
     const options: RequestInit = {
       method,
@@ -61,13 +65,11 @@ export class RestQLExecutor {
       },
     };
 
-    if (
-      body &&
-      (method === HttpMethod.POST ||
-        method === HttpMethod.PUT ||
-        method === HttpMethod.PATCH)
-    ) {
-      options.body = JSON.stringify(body);
+    if (method === HttpMethod.GET) {
+      const queryParams = new URLSearchParams(queryArgs);
+      url += `?${queryParams.toString()}`;
+    } else if (Object.keys(queryArgs).length > 0) {
+      options.body = JSON.stringify(queryArgs);
     }
 
     const response = await fetch(url, options);
