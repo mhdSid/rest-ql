@@ -81,7 +81,6 @@ export class RestQL {
     options: { useCache?: boolean } = {}
   ): Promise<any | any[]> {
     const parsedOperation = this.queryParser.parse(operationString);
-
     if (parsedOperation.operationType === "query") {
       const result = await this.executeQuery(
         parsedOperation,
@@ -90,7 +89,8 @@ export class RestQL {
       );
       return result.shapedData;
     } else if (parsedOperation.operationType === "mutation") {
-      return this.executeMutation(parsedOperation, variables);
+      const result = await this.executeMutation(parsedOperation, variables);
+      return result;
     } else {
       throw new ValidationError(
         `Unsupported operation type: ${parsedOperation.operationType}`
@@ -175,16 +175,20 @@ export class RestQL {
             variables,
             method
           );
-
           const dataPath = resourceSchema.dataPath || "";
           const extractedData = this.extractNestedValue(result, dataPath);
-          const shapedResult = this.shapeData(
+          const shapedResult = await this.shapeData(
             extractedData,
             mutation,
-            resourceSchema
+            resourceSchema,
+            variables
           );
 
-          results.push(this.cherryPickFields(shapedResult, mutation.fields));
+          const pickedResult = this.cherryPickFields(
+            shapedResult,
+            mutation.fields
+          );
+          results.push(pickedResult);
         })
       );
     }
@@ -216,6 +220,41 @@ export class RestQL {
       default:
         throw new Error(`Unsupported operation type: ${operationType}`);
     }
+  }
+
+  private cherryPickFields(data: any, fields: any): any {
+    if (typeof data !== "object" || data === null) {
+      return data;
+    }
+
+    const result: any = {};
+
+    for (const [fieldName, fieldValue] of Object.entries(fields)) {
+      if (typeof fieldValue === "object" && fieldValue !== null) {
+        if (fieldValue.value === true) {
+          result[fieldName] = data[fieldName];
+        } else if (fieldValue.fields) {
+          if (Array.isArray(data[fieldName])) {
+            result[fieldName] = data[fieldName].map((item: any) =>
+              this.cherryPickFields(item, fieldValue.fields)
+            );
+          } else if (
+            typeof data[fieldName] === "object" &&
+            data[fieldName] !== null
+          ) {
+            result[fieldName] = this.cherryPickFields(
+              data[fieldName],
+              fieldValue.fields
+            );
+          } else {
+            result[fieldName] = data[fieldName];
+          }
+        }
+      } else if (fieldValue === true) {
+        result[fieldName] = data[fieldName];
+      }
+    }
+    return result;
   }
 
   private async shapeData(
@@ -255,20 +294,20 @@ export class RestQL {
           this.schema[fieldSchema.type.toLowerCase()];
         if (nestedResourceSchema) {
           try {
+            const nestedQuery = {
+              queryName: fieldName,
+              args: fieldValue.args || {},
+              fields: fieldValue.fields,
+            };
             const nestedResult = await this.executeQueryField(
               fieldName,
-              fieldValue.fields,
-              fieldValue.args || {},
+              nestedQuery.fields,
+              nestedQuery.args,
               variables,
-              nestedResourceSchema as SchemaResource
+              nestedResourceSchema
             );
             rawValue = nestedResult.shapedData;
-            rawResponses[fieldName] = nestedResult.rawResponse;
           } catch (error) {
-            console.error(
-              `Error fetching nested resource ${fieldName}:`,
-              error
-            );
             rawValue = null;
           }
         }
@@ -393,29 +432,6 @@ export class RestQL {
       );
       return shapedArray;
     }
-  }
-
-  private cherryPickFields(data: any, fields: any): any {
-    const result: any = {};
-
-    for (const [fieldName, fieldValue] of Object.entries(fields)) {
-      if (typeof fieldValue === "object" && fieldValue !== null) {
-        if (Array.isArray(data[fieldName])) {
-          result[fieldName] = data[fieldName].map((item: any) =>
-            this.cherryPickFields(item, fieldValue)
-          );
-        } else {
-          result[fieldName] = this.cherryPickFields(
-            data[fieldName],
-            fieldValue
-          );
-        }
-      } else {
-        result[fieldName] = data[fieldName];
-      }
-    }
-
-    return result;
   }
 
   private getCacheKey(
