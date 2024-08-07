@@ -182,6 +182,7 @@ const sdl = `
     email: String @from("contact_info.email")
     address: Address @from("location")
     hobbyList: [Hobby] @from("hobbies")
+    posts: Post
 
     @endpoint(GET, "/users", "data.data[0]")
     @endpoint(POST, "/users", "data.data[0]")
@@ -256,15 +257,16 @@ const restql = new RestQL(sdl, baseUrls, options, transformers);
 
 // Define one or many queries
 const query = `
-  query GetPageData {
-    post {
-      id
-      name
-    }
-    user {
+  query GetUserWithPosts($userId: String!, $postLimit: Int) {
+    user(userId: $userId) {
       id
       name
       email
+      parkName
+      hobbyList {
+        id
+        name
+      }
       address {
         street
         city
@@ -274,12 +276,20 @@ const query = `
           blockList {
             name
             number
+            parkList {
+              parkName
+              parkId
+            }
           }
         }
       }
-      hobbyList {
-        name
+      posts(postLimit: $postLimit) {
         id
+        name
+        searchResult {
+          searchDesc
+          searchType
+        }
       }
     }
   }
@@ -288,7 +298,10 @@ const query = `
 // Execute the query
 async function executeQuery() {
   try {
-    const result = await restql.execute(query, {}, { useCache: true });
+    const result = await restql.execute(query, {
+      userId: "123",
+      postLimit: 5,
+    }, { useCache: true });
     console.log("Query result:", result);
 
     // Caching
