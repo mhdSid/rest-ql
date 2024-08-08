@@ -24,10 +24,12 @@ export interface ValueType {
 }
 
 export interface SchemaField {
-  type: string; // This can now be like "[[Score]]" for nested arrays
+  type: string;
+  isNullable: boolean;
   from?: string;
   transform?: string;
 }
+
 export interface Endpoint {
   method: HttpMethod;
   path: string;
@@ -93,31 +95,14 @@ export interface BatchRequest {
   reject: (reason: any) => void;
 }
 
-// You might also want to add these types for completeness:
-
-export interface CacheItem {
-  data: any;
+export interface CacheItem<T> {
+  data: T;
   expiry: number;
 }
 
 export interface RestQLExecutorOptions {
   baseUrls: BaseUrls;
   headers: { [key: string]: string };
-}
-
-export interface CacheEntry<T> {
-  data: T;
-  expiry: number;
-}
-
-export interface BatchManagerOptions {
-  batchInterval: number;
-  maxBatchSize?: number;
-}
-
-export interface CacheEntry<T> {
-  data: T;
-  expiry: number;
 }
 
 export interface BatchManagerOptions {

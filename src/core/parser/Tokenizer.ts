@@ -1,9 +1,14 @@
+import { Logger } from "../utils/Logger";
 import { ValidationError } from "../validation/errors";
 import { Token, TokenType } from "../types";
 
-export class Tokenizer {
+export class Tokenizer extends Logger {
   private pos = 0;
   private input = "";
+
+  constructor() {
+    super("Tokenizer");
+  }
 
   tokenize(input: string): Token[] {
     this.pos = 0;
@@ -14,48 +19,28 @@ export class Tokenizer {
       const char = this.input[this.pos];
       switch (char) {
         case "(":
-          tokens.push({
-            type: TokenType.LEFT_PAREN,
-            value: "(",
-            pos: this.pos++,
-          });
+          tokens.push(this.createToken(TokenType.LEFT_PAREN, "("));
           break;
         case ")":
-          tokens.push({
-            type: TokenType.RIGHT_PAREN,
-            value: ")",
-            pos: this.pos++,
-          });
+          tokens.push(this.createToken(TokenType.RIGHT_PAREN, ")"));
           break;
         case "{":
-          tokens.push({
-            type: TokenType.LEFT_BRACE,
-            value: "{",
-            pos: this.pos++,
-          });
+          tokens.push(this.createToken(TokenType.LEFT_BRACE, "{"));
           break;
         case "}":
-          tokens.push({
-            type: TokenType.RIGHT_BRACE,
-            value: "}",
-            pos: this.pos++,
-          });
+          tokens.push(this.createToken(TokenType.RIGHT_BRACE, "}"));
           break;
         case ":":
-          tokens.push({ type: TokenType.COLON, value: ":", pos: this.pos++ });
+          tokens.push(this.createToken(TokenType.COLON, ":"));
           break;
         case ",":
-          tokens.push({ type: TokenType.COMMA, value: ",", pos: this.pos++ });
+          tokens.push(this.createToken(TokenType.COMMA, ","));
           break;
         case '"':
           tokens.push(this.tokenizeString());
           break;
         case "!":
-          tokens.push({
-            type: TokenType.EXCLAMATION,
-            value: "!",
-            pos: this.pos++,
-          });
+          tokens.push(this.createToken(TokenType.EXCLAMATION, "!"));
           break;
         default:
           if (/[a-zA-Z0-9_$]/.test(char)) {
@@ -63,15 +48,23 @@ export class Tokenizer {
           } else if (/\s/.test(char)) {
             this.pos++;
           } else {
-            throw new ValidationError(
-              `Unexpected character: ${char} at position ${this.pos}`
-            );
+            const errorMsg = `Unexpected character: ${char} at position ${this.pos}`;
+            this.error(errorMsg);
+            throw new ValidationError(errorMsg);
           }
       }
     }
 
-    tokens.push({ type: TokenType.EOF, value: "", pos: this.pos });
+    tokens.push(this.createToken(TokenType.EOF, ""));
+    this.log(`Tokenization complete. Total tokens: ${tokens.length}`);
     return tokens;
+  }
+
+  private createToken(type: TokenType, value: string): Token {
+    const token: Token = { type, value, pos: this.pos };
+    this.pos += value.length;
+    this.log(`Created token: ${TokenType[type]} at position ${token.pos}`);
+    return token;
   }
 
   private tokenizeString(): Token {
@@ -81,16 +74,14 @@ export class Tokenizer {
       this.pos++;
     }
     if (this.pos >= this.input.length) {
-      throw new ValidationError(
-        `Unterminated string starting at position ${start}`
-      );
+      const errorMsg = `Unterminated string starting at position ${start}`;
+      this.error(errorMsg);
+      throw new ValidationError(errorMsg);
     }
     this.pos++;
-    return {
-      type: TokenType.STRING,
-      value: this.input.slice(start, this.pos),
-      pos: start,
-    };
+    const value = this.input.slice(start, this.pos);
+    this.log(`Tokenized string: ${value} at position ${start}`);
+    return { type: TokenType.STRING, value, pos: start };
   }
 
   private tokenizeIdentifier(): Token {
@@ -101,10 +92,8 @@ export class Tokenizer {
     ) {
       this.pos++;
     }
-    return {
-      type: TokenType.IDENTIFIER,
-      value: this.input.slice(start, this.pos),
-      pos: start,
-    };
+    const value = this.input.slice(start, this.pos);
+    this.log(`Tokenized identifier: ${value} at position ${start}`);
+    return { type: TokenType.IDENTIFIER, value, pos: start };
   }
 }

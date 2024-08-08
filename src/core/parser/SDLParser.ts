@@ -1,19 +1,20 @@
+import { Logger } from "../utils/Logger";
 import {
   Schema,
   SchemaResource,
   ValueType,
   SchemaField,
-  Endpoint,
   HttpMethod,
 } from "../types";
 
-export class SDLParser {
+export class SDLParser extends Logger {
   private input: string;
   private pos: number;
   private schema: Schema;
   private currentType: SchemaResource | ValueType | null;
 
   constructor(input: string) {
+    super("SDLParser");
     this.input = input;
     this.pos = 0;
     this.schema = { _types: {} };
@@ -24,18 +25,27 @@ export class SDLParser {
     try {
       while (this.pos < this.input.length) {
         this.consumeWhitespace();
+        this.log("Current position:", this.pos);
+        this.log(
+          "Next 10 characters:",
+          this.input.slice(this.pos, this.pos + 10)
+        );
         if (this.input.slice(this.pos, this.pos + 4) === "type") {
+          this.log("Parsing type");
           this.parseType();
         } else if (this.pos < this.input.length) {
-          throw new Error(
-            `Unexpected character at position ${this.pos}: ${
-              this.input[this.pos]
-            }`
-          );
+          const errorMsg = `Unexpected character at position ${this.pos}: ${
+            this.input[this.pos]
+          }`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
       }
       return this.schema;
     } catch (error) {
+      this.error("Error parsing SDL:", error);
+      this.error("Current position:", this.pos);
+      this.error("Context:", this.getErrorContext());
       throw error;
     }
   }
@@ -94,9 +104,9 @@ export class SDLParser {
     this.consumeWhitespace();
     this.consumeToken(":");
     this.consumeWhitespace();
-    const fieldType = this.parseFieldType();
+    const { fieldType, isNullable } = this.parseFieldType();
 
-    const field: SchemaField = { type: fieldType };
+    const field: SchemaField = { type: fieldType, isNullable };
 
     this.consumeWhitespace();
     while (this.peekChar() === "@") {
@@ -108,17 +118,14 @@ export class SDLParser {
       }
     }
 
-    // Check if the field type is a reference to another resource
-    if (this.schema._types[fieldType] || this.schema[fieldType.toLowerCase()]) {
-      field.isResource = true;
-    }
-
     if (this.currentType) {
       this.currentType.fields[fieldName] = field;
     }
   }
-  private parseFieldType(): string {
+
+  private parseFieldType(): { fieldType: string; isNullable: boolean } {
     let fieldType = "";
+    let isNullable = true;
 
     while (this.peekChar() === "[") {
       this.consumeToken("[");
@@ -134,7 +141,32 @@ export class SDLParser {
       this.consumeWhitespace();
     }
 
-    return fieldType;
+    if (this.peekChar() === "!") {
+      this.consumeToken("!");
+      isNullable = false;
+      fieldType += "!";
+    }
+
+    return { fieldType, isNullable };
+  }
+
+  private parseIdentifier(): string {
+    this.consumeWhitespace();
+    const start = this.pos;
+    while (
+      this.pos < this.input.length &&
+      /[a-zA-Z0-9_]/.test(this.input[this.pos])
+    ) {
+      this.pos++;
+    }
+    if (start === this.pos) {
+      const errorMsg = `Expected identifier at position ${
+        this.pos
+      }. Context: ${this.getErrorContext()}`;
+      this.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+    return this.input.slice(start, this.pos);
   }
 
   private parseDirective(): { type: string; value: string } {
@@ -163,27 +195,15 @@ export class SDLParser {
         this.currentType.endpoints[method] = { method, path };
         this.currentType.dataPath = dataPath;
       } else {
-        console.warn("No current resource to add endpoint to");
+        this.warn("No current resource to add endpoint to");
       }
 
       return { type: "endpoint", value: "" };
     }
 
-    throw new Error(`Unknown directive: @${directiveName}`);
-  }
-
-  private parseIdentifier(): string {
-    const start = this.pos;
-    while (
-      this.pos < this.input.length &&
-      /[a-zA-Z0-9_]/.test(this.input[this.pos])
-    ) {
-      this.pos++;
-    }
-    if (start === this.pos) {
-      throw new Error(`Expected identifier at position ${this.pos}`);
-    }
-    return this.input.slice(start, this.pos);
+    const errorMsg = `Unknown directive: @${directiveName}`;
+    this.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   private parseString(): string {
@@ -203,12 +223,12 @@ export class SDLParser {
   private consumeToken(expected: string): void {
     this.consumeWhitespace();
     if (this.input.slice(this.pos, this.pos + expected.length) !== expected) {
-      throw new Error(
-        `Expected "${expected}" but found "${this.input.slice(
-          this.pos,
-          this.pos + expected.length || 1
-        )}"`
-      );
+      const errorMsg = `Expected "${expected}" but found "${this.input.slice(
+        this.pos,
+        this.pos + expected.length || 1
+      )}" at position ${this.pos}. Context: ${this.getErrorContext()}`;
+      this.error(errorMsg);
+      throw new Error(errorMsg);
     }
     this.pos += expected.length;
   }

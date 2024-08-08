@@ -1,3 +1,4 @@
+import { Logger } from "./utils/Logger";
 import { RestQLParser } from "./parser/Parser";
 import {
   Schema,
@@ -18,7 +19,7 @@ import { ValidationError } from "./validation/errors";
 import { SchemaValidator } from "./validation/SchemaValidator";
 import lodashGet from "lodash.get";
 
-export class RestQL {
+export class RestQL extends Logger {
   private schema: Schema;
   private baseUrls: BaseUrls;
   private options: Required<RestQLOptions>;
@@ -38,6 +39,7 @@ export class RestQL {
     transformers: { [key: string]: Function } = {},
     debugMode: boolean = false
   ) {
+    super("RestQL");
     this.baseUrls = baseUrls;
     this.options = {
       cacheTimeout: 5 * 60 * 1000,
@@ -48,14 +50,15 @@ export class RestQL {
       maxBatchSize: Infinity,
       ...options,
     };
-    this.schemaValidator = new SchemaValidator(transformers);
     this.debugMode = debugMode;
 
     this.sdlParser = new SDLParser(sdl);
     try {
       this.schema = this.sdlParser.parseSDL();
+      this.schemaValidator = new SchemaValidator(transformers);
       this.schemaValidator.validateSchema(this.schema);
     } catch (error) {
+      this.error("Error parsing or validating schema:", error);
       throw error;
     }
 
@@ -65,14 +68,11 @@ export class RestQL {
       this.options.batchInterval,
       this.options.maxBatchSize
     );
-    this.executor = new RestQLExecutor(baseUrls, this.options.headers);
+    this.executor = new RestQLExecutor({
+      baseUrls: this.baseUrls,
+      headers: this.options.headers,
+    });
     this.transformers = transformers;
-  }
-
-  private log(...args: any[]) {
-    if (this.debugMode) {
-      console.log(...args);
-    }
   }
 
   async execute(
@@ -80,7 +80,13 @@ export class RestQL {
     variables: { [key: string]: any } = {},
     options: { useCache?: boolean } = {}
   ): Promise<any | any[]> {
+    this.log("Execute called with:", {
+      operationString,
+      variables,
+      options,
+    });
     const parsedOperation = this.queryParser.parse(operationString);
+    this.log("Parsed operation:", parsedOperation);
     if (parsedOperation.operationType === "query") {
       const result = await this.executeQuery(
         parsedOperation,
@@ -89,7 +95,9 @@ export class RestQL {
       );
       return result.shapedData;
     } else if (parsedOperation.operationType === "mutation") {
+      this.log("Executing mutation");
       const result = await this.executeMutation(parsedOperation, variables);
+      this.log("Mutation result:", result);
       return result;
     } else {
       throw new ValidationError(
@@ -147,10 +155,12 @@ export class RestQL {
     parsedOperation: ParsedOperation,
     variables: VariableValues
   ): Promise<any[]> {
+    this.log("executeMutation called with:", { parsedOperation, variables });
     const results: any[] = [];
     const batchPromises: Promise<void>[] = [];
 
     for (const mutation of parsedOperation.queries) {
+      this.log("Processing mutation:", mutation);
       batchPromises.push(
         this.batchManager.add(mutation.queryName, async () => {
           const [operationType, resourceName] = this.parseMutationType(
@@ -184,10 +194,12 @@ export class RestQL {
             variables
           );
 
+          this.log("Shaped result before cherry-picking:", shapedResult);
           const pickedResult = this.cherryPickFields(
             shapedResult,
             mutation.fields
           );
+          this.log("Cherry-picked result:", pickedResult);
           results.push(pickedResult);
         })
       );
@@ -223,13 +235,21 @@ export class RestQL {
   }
 
   private cherryPickFields(data: any, fields: any): any {
+    this.log("cherryPickFields called with:", { data, fields });
+
     if (typeof data !== "object" || data === null) {
+      this.log("cherryPickFields result (non-object):", data);
       return data;
     }
 
     const result: any = {};
 
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
+      this.log(`Processing field: ${fieldName}`, {
+        fieldValue,
+        dataValue: data[fieldName],
+      });
+
       if (typeof fieldValue === "object" && fieldValue !== null) {
         if (fieldValue.value === true) {
           result[fieldName] = data[fieldName];
@@ -253,7 +273,11 @@ export class RestQL {
       } else if (fieldValue === true) {
         result[fieldName] = data[fieldName];
       }
+
+      this.log(`Field ${fieldName} result:`, result[fieldName]);
     }
+
+    this.log("cherryPickFields result:", result);
     return result;
   }
 
@@ -277,7 +301,7 @@ export class RestQL {
     for (const [fieldName, fieldValue] of Object.entries(query.fields)) {
       const fieldSchema = resourceSchema.fields?.[fieldName];
       if (!fieldSchema) {
-        console.warn(
+        this.warn(
           `Field schema for "${fieldName}" not found in resource schema. Skipping.`
         );
         continue;
@@ -286,14 +310,17 @@ export class RestQL {
       const fromPath = fieldSchema.from || fieldName;
       let rawValue = this.extractNestedValue(data, fromPath);
 
-      if (
-        fieldSchema.isResource ||
-        this.schema[fieldSchema.type.toLowerCase()]
-      ) {
-        const nestedResourceSchema =
-          this.schema[fieldSchema.type.toLowerCase()];
-        if (nestedResourceSchema) {
-          try {
+      try {
+        // Apply type coercion and nullability check
+        rawValue = this.coerceValue(rawValue, fieldSchema);
+
+        if (
+          fieldSchema.isResource ||
+          this.schema[fieldSchema.type.toLowerCase()]
+        ) {
+          const nestedResourceSchema =
+            this.schema[fieldSchema.type.toLowerCase()];
+          if (nestedResourceSchema) {
             const nestedQuery = {
               queryName: fieldName,
               args: fieldValue.args || {},
@@ -307,38 +334,42 @@ export class RestQL {
               nestedResourceSchema
             );
             rawValue = nestedResult.shapedData;
-          } catch (error) {
-            rawValue = null;
+          }
+        } else if (typeof fieldValue === "object" && fieldValue.fields) {
+          const nestedType = fieldSchema.type.replace(/[\[\]!]/g, "");
+          const nestedSchema = this.schema._types[nestedType];
+          if (nestedSchema) {
+            rawValue = await this.shapeData(
+              rawValue,
+              { fields: fieldValue.fields },
+              nestedSchema,
+              variables,
+              rawResponses
+            );
+          } else {
+            this.warn(`Schema not found for nested type: ${nestedType}`);
           }
         }
-      } else if (typeof fieldValue === "object" && fieldValue.fields) {
-        const nestedType = fieldSchema.type.replace(/[\[\]]/g, "");
-        const nestedSchema = this.schema._types[nestedType];
-        if (nestedSchema) {
-          const nestedResult = await this.shapeData(
-            rawValue,
-            { fields: fieldValue.fields },
-            nestedSchema,
-            variables,
+
+        if (fieldSchema.transform && this.transformers[fieldSchema.transform]) {
+          rawValue = this.transformers[fieldSchema.transform](
+            data,
+            { [fieldName]: rawValue },
             rawResponses
           );
-          rawValue = nestedResult;
-        } else {
-          console.warn(`Schema not found for nested type: ${nestedType}`);
         }
-      }
 
-      if (fieldSchema.transform && this.transformers[fieldSchema.transform]) {
-        const transformedValue = this.transformers[fieldSchema.transform](
-          data,
-          {
-            [fieldName]: rawValue,
-          },
-          rawResponses
-        );
-        shapedData[fieldName] = transformedValue;
-      } else {
         shapedData[fieldName] = rawValue;
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          this.error(`Validation error for field ${fieldName}:`, error.message);
+          if (!fieldSchema.isNullable) {
+            throw error;
+          }
+          shapedData[fieldName] = null;
+        } else {
+          throw error;
+        }
       }
     }
 
@@ -347,15 +378,45 @@ export class RestQL {
       resourceSchema.transform &&
       this.transformers[resourceSchema.transform]
     ) {
-      const finalTransformedData = this.transformers[resourceSchema.transform](
+      return this.transformers[resourceSchema.transform](
         data,
         shapedData,
         rawResponses
       );
-      return finalTransformedData;
     }
 
     return shapedData;
+  }
+
+  private coerceValue(value: any, fieldSchema: SchemaField): any {
+    const { type, isNullable } = fieldSchema;
+
+    if (value === null || value === undefined) {
+      if (!isNullable) {
+        throw new ValidationError(
+          `Non-nullable field received null or undefined value`
+        );
+      }
+      return null;
+    }
+
+    const baseType = type.replace(/[\[\]!]/g, "");
+
+    switch (baseType) {
+      case "Boolean":
+        return Boolean(value);
+      case "String":
+        return String(value);
+      case "Int":
+        const num = Number(value);
+        if (isNaN(num) || !Number.isInteger(num)) {
+          throw new ValidationError(`Invalid integer value: ${value}`);
+        }
+        return num;
+      default:
+        // For custom types, we don't perform any coercion
+        return value;
+    }
   }
 
   private async executeQueryField(
@@ -365,13 +426,20 @@ export class RestQL {
     variables: VariableValues,
     resourceSchema: SchemaResource
   ): Promise<{ shapedData: any; rawResponse: any }> {
+    this.log("Executing query field:", {
+      fieldName,
+      fields,
+      args,
+      variables,
+    });
+
     if (!resourceSchema.endpoints) {
-      console.error(`No endpoints defined for resource "${fieldName}".`);
+      this.error(`No endpoints defined for resource "${fieldName}".`);
       throw new Error(`No endpoints defined for resource "${fieldName}".`);
     }
 
     if (!resourceSchema.endpoints.GET) {
-      console.error(`GET endpoint not found for resource "${fieldName}".`);
+      this.error(`GET endpoint not found for resource "${fieldName}".`);
       throw new Error(`GET endpoint not found for resource "${fieldName}".`);
     }
 
@@ -398,7 +466,7 @@ export class RestQL {
       );
       return { shapedData: shapedResult, rawResponse: result };
     } catch (error) {
-      console.error(`Error executing query for ${fieldName}:`, error);
+      this.error(`Error executing query for ${fieldName}:`, error);
       throw error;
     }
   }
@@ -460,5 +528,11 @@ export class RestQL {
       }
     }
     return resolved;
+  }
+
+  private debugLog(...args: any[]): void {
+    if (this.debugMode) {
+      this.log(...args);
+    }
   }
 }

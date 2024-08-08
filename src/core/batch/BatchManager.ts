@@ -1,10 +1,14 @@
-export class BatchManager {
+import { Logger } from "../utils/Logger";
+import { BatchManagerOptions } from "../types";
+
+export class BatchManager extends Logger {
   private batchInterval: number;
   private queue: { [key: string]: (() => Promise<any>)[] };
   private timer: number | null;
   private maxBatchSize: number;
 
-  constructor(batchInterval: number, maxBatchSize = Infinity) {
+  constructor({ batchInterval, maxBatchSize = Infinity }: BatchManagerOptions) {
+    super("BatchManager");
     this.batchInterval = batchInterval;
     this.queue = {};
     this.timer = null;
@@ -16,7 +20,7 @@ export class BatchManager {
       this.queue[key] = [];
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       this.queue[key].push(async () => {
         try {
           const result = await operation();
@@ -39,7 +43,7 @@ export class BatchManager {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    
+
     const keys = specificKey ? [specificKey] : Object.keys(this.queue);
 
     for (const key of keys) {
@@ -49,7 +53,7 @@ export class BatchManager {
       try {
         await Promise.all(operations.map((op) => op()));
       } catch (error) {
-        console.error(`Batch execution error for key ${key}:`, error);
+        this.error(`Batch execution error for key ${key}:`, error);
       }
     }
 
