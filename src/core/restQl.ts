@@ -39,7 +39,7 @@ export class RestQL extends Logger {
     transformers: { [key: string]: Function } = {},
     debugMode: boolean = false
   ) {
-    super("RestQL");
+    super("RestQL", debugMode);
     this.baseUrls = baseUrls;
     this.options = {
       cacheTimeout: 5 * 60 * 1000,

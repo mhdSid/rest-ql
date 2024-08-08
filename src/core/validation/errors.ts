@@ -1,20 +1,7 @@
-import { Logger } from "../utils/Logger";
-
 export class RestQLError extends Error {
-  protected logger: Logger;
-
   constructor(message: string) {
     super(message);
     this.name = "RestQLError";
-    this.logger = new Logger(this.name);
-    this.logError();
-  }
-
-  protected logError(): void {
-    this.logger.error(`${this.name}: ${this.message}`);
-    if (this.stack) {
-      this.logger.error(`Stack trace: ${this.stack}`);
-    }
   }
 }
 
