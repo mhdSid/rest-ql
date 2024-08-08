@@ -52,7 +52,7 @@ RestQL uses an SDL to define the structure of your API.
 ```
 - **@from("api_field_name")**: Maps the field to a different name in the API response
 - **@transform("transformerName")**: Applies a custom transformation to the field
-- **@endpoint(METHOD, "path", "dataPath")**: Defines REST endpoint for the
+- **@endpoint(METHOD, "path", "dataPath")**: Defines REST endpoint for the resource
 
 ### Query Language
 Basic Query Structure
@@ -186,9 +186,9 @@ const sdl = `
 
     @endpoint(GET, "/users", "data.data[0]")
     @endpoint(POST, "/users", "data.data[0]")
-    @endpoint(PUT, "/users/{id}", "data.data[0]")
-    @endpoint(PATCH, "/users/{id}", "data.data[0]")
-    @endpoint(DELETE, "/users/{id}", "data")
+    @endpoint(PUT, "/users", "data.data[0]")
+    @endpoint(PATCH, "/users", "data.data[0]")
+    @endpoint(DELETE, "/users", "data")
   }
 
   type Post {
@@ -197,9 +197,9 @@ const sdl = `
 
     @endpoint(GET, "/posts", "data.data[0]")
     @endpoint(POST, "/posts", "data.data[0]")
-    @endpoint(PUT, "/posts/{id}", "data.data[0]")
-    @endpoint(PATCH, "/posts/{id}", "data.data[0]")
-    @endpoint(DELETE, "/posts/{id}", "data")
+    @endpoint(PUT, "/posts", "data.data[0]")
+    @endpoint(PATCH, "/posts", "data.data[0]")
+    @endpoint(DELETE, "/posts", "data")
   }
 
   type Address {
