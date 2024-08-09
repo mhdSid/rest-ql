@@ -62,14 +62,18 @@ export class RestQLParser extends Logger {
       this.consumeToken(TokenType.LEFT_PAREN);
 
       while (this.peek().type !== TokenType.RIGHT_PAREN) {
-        const varName = this.consumeToken(TokenType.IDENTIFIER).value;
+        const varName = this.consumeToken(TokenType.IDENTIFIER).value.slice(1); // Remove the '$' prefix
         this.consumeToken(TokenType.COLON);
-        const varType = this.consumeToken(TokenType.IDENTIFIER).value;
+        let varType = this.consumeToken(TokenType.IDENTIFIER).value;
         const isRequired = this.peek().type === TokenType.EXCLAMATION;
         if (isRequired) {
           this.consumeToken(TokenType.EXCLAMATION);
+          varType += "!";
         }
-        variables[varName] = { type: varType + (isRequired ? "!" : "") };
+        variables[varName] = { type: varType, isRequired };
+        this.log(
+          `Parsed variable: ${varName}, type: ${varType}, required: ${isRequired}`
+        );
 
         if (this.peek().type === TokenType.COMMA) {
           this.consumeToken(TokenType.COMMA);
@@ -78,6 +82,7 @@ export class RestQLParser extends Logger {
 
       this.consumeToken(TokenType.RIGHT_PAREN);
     }
+    this.log("Parsed variables:", variables);
     return variables;
   }
 

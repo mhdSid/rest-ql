@@ -4,7 +4,7 @@ import { BatchManagerOptions } from "../types";
 export class BatchManager extends Logger {
   private batchInterval: number;
   private queue: { [key: string]: (() => Promise<any>)[] };
-  private timer: number | null;
+  private timer: NodeJS.Timeout | null;
   private maxBatchSize: number;
 
   constructor({ batchInterval, maxBatchSize = Infinity }: BatchManagerOptions) {

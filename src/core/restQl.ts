@@ -87,16 +87,29 @@ export class RestQL extends Logger {
     });
     const parsedOperation = this.queryParser.parse(operationString);
     this.log("Parsed operation:", parsedOperation);
+
+    // Filter out undefined variables
+    const definedVariables = Object.fromEntries(
+      Object.entries(variables).filter(([_, value]) => value !== undefined)
+    );
+    this.log("Defined variables:", definedVariables);
+
+    // Validate only the defined variables
+    this.validateVariables(parsedOperation.variables, definedVariables);
+
     if (parsedOperation.operationType === "query") {
       const result = await this.executeQuery(
         parsedOperation,
-        variables,
+        definedVariables,
         options.useCache ?? true
       );
       return result.shapedData;
     } else if (parsedOperation.operationType === "mutation") {
       this.log("Executing mutation");
-      const result = await this.executeMutation(parsedOperation, variables);
+      const result = await this.executeMutation(
+        parsedOperation,
+        definedVariables
+      );
       this.log("Mutation result:", result);
       return result;
     } else {
@@ -104,6 +117,26 @@ export class RestQL extends Logger {
         `Unsupported operation type: ${parsedOperation.operationType}`
       );
     }
+  }
+
+  private validateVariables(
+    declaredVariables: { [key: string]: VariableDefinition },
+    providedVariables: { [key: string]: any }
+  ): void {
+    this.log("Validating variables:");
+    this.log("Declared variables:", declaredVariables);
+    this.log("Provided variables:", providedVariables);
+
+    for (const [varName, varDef] of Object.entries(declaredVariables)) {
+      this.log(`Checking variable: ${varName}, required: ${varDef.isRequired}`);
+      if (varDef.isRequired && !(varName in providedVariables)) {
+        this.log(`Required variable ${varName} is not provided`);
+        throw new ValidationError(
+          `Required variable ${varName} is not provided`
+        );
+      }
+    }
+    this.log("Variable validation completed successfully");
   }
 
   private async executeQuery(
@@ -519,20 +552,15 @@ export class RestQL extends Logger {
     for (const [key, value] of Object.entries(args)) {
       if (typeof value === "string" && value.startsWith("$")) {
         const varName = value.slice(1);
-        if (!(varName in variables)) {
-          throw new ValidationError(`Variable $${varName} is not defined`);
+        if (varName in variables) {
+          resolved[key] = variables[varName];
         }
-        resolved[key] = variables[varName];
+        // If the variable is not provided, we simply skip it
+        // This allows optional variables to be omitted
       } else {
         resolved[key] = value;
       }
     }
     return resolved;
-  }
-
-  private debugLog(...args: any[]): void {
-    if (this.debugMode) {
-      this.log(...args);
-    }
   }
 }

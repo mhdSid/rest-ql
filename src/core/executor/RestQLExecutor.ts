@@ -54,7 +54,7 @@ export class RestQLExecutor extends Logger {
     return data;
   }
 
-  private buildUrl(path: string, variables: { [key: string]: string }): string {
+  private buildUrl(path: string, variables: { [key: string]: any }): string {
     this.log("Building URL:", { path, variables });
     let baseUrl = this.baseUrls[path] || this.baseUrls.default;
 
@@ -70,7 +70,12 @@ export class RestQLExecutor extends Logger {
     }
     url += path;
 
-    url = url.replace(/{(\w+)}/g, (_, key) => variables[key] || "");
+    url = url.replace(/{(\w+)}/g, (_, key) =>
+      variables[key] !== undefined ? encodeURIComponent(variables[key]) : ""
+    );
+
+    // Remove any trailing slashes that might have been left by undefined variables
+    url = url.replace(/\/+$/, "");
 
     this.log("Built URL:", url);
     return url;
@@ -90,10 +95,22 @@ export class RestQLExecutor extends Logger {
     };
 
     if (method === HttpMethod.GET) {
-      const queryParams = new URLSearchParams(queryArgs);
-      url += `?${queryParams.toString()}`;
+      const queryParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(queryArgs)) {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString());
+        }
+      }
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
     } else if (Object.keys(queryArgs).length > 0) {
-      options.body = JSON.stringify(queryArgs);
+      options.body = JSON.stringify(
+        Object.fromEntries(
+          Object.entries(queryArgs).filter(([_, v]) => v !== undefined)
+        )
+      );
     }
 
     this.log(`Fetching ${method} ${url}`);
