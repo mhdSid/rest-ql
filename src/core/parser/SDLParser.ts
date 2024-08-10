@@ -7,90 +7,118 @@ import {
   HttpMethod,
 } from "../types";
 
+/**
+ * SDLParser class for parsing Schema Definition Language (SDL) input.
+ * @extends Logger
+ */
 export class SDLParser extends Logger {
-  private input: string;
-  private pos: number;
-  private schema: Schema;
-  private currentType: SchemaResource | ValueType | null;
+  private sdlInput: string;
+  private currentPosition: number;
+  private parsedSchema: Schema;
+  private currentTypeDefinition: SchemaResource | ValueType | null;
 
+  /**
+   * Creates an instance of SDLParser.
+   * @param {string} input - The SDL input string to parse
+   */
   constructor(input: string) {
     super("SDLParser");
-    this.input = input;
-    this.pos = 0;
-    this.schema = { _types: {} };
-    this.currentType = null;
+    this.sdlInput = input;
+    this.currentPosition = 0;
+    this.parsedSchema = { _types: {} };
+    this.currentTypeDefinition = null;
   }
 
+  /**
+   * Parses the SDL input and returns the resulting schema.
+   * @returns {Schema} The parsed schema
+   * @throws {Error} If parsing fails
+   */
   public parseSDL(): Schema {
     try {
-      while (this.pos < this.input.length) {
-        this.consumeWhitespace();
-        this.log("Current position:", this.pos);
+      while (this.currentPosition < this.sdlInput.length) {
+        this.skipWhitespace();
+        this.log("Current position:", this.currentPosition);
         this.log(
           "Next 10 characters:",
-          this.input.slice(this.pos, this.pos + 10)
+          this.sdlInput.slice(this.currentPosition, this.currentPosition + 10)
         );
-        if (this.input.slice(this.pos, this.pos + 4) === "type") {
+        if (
+          this.sdlInput.slice(
+            this.currentPosition,
+            this.currentPosition + 4
+          ) === "type"
+        ) {
           this.log("Parsing type");
-          this.parseType();
-        } else if (this.pos < this.input.length) {
-          const errorMsg = `Unexpected character at position ${this.pos}: ${
-            this.input[this.pos]
-          }`;
+          this.parseTypeDefinition();
+        } else if (this.currentPosition < this.sdlInput.length) {
+          const errorMsg = `Unexpected character at position ${
+            this.currentPosition
+          }: ${this.sdlInput[this.currentPosition]}`;
           this.error(errorMsg);
           throw new Error(errorMsg);
         }
       }
-      return this.schema;
+      return this.parsedSchema;
     } catch (error) {
       this.error("Error parsing SDL:", error);
-      this.error("Current position:", this.pos);
+      this.error("Current position:", this.currentPosition);
       this.error("Context:", this.getErrorContext());
       throw error;
     }
   }
 
-  private parseType(): void {
-    this.consumeToken("type");
-    this.consumeWhitespace();
+  /**
+   * Parses a type definition in the SDL.
+   * @private
+   */
+  private parseTypeDefinition(): void {
+    this.expectToken("type");
+    this.skipWhitespace();
     const typeName = this.parseIdentifier();
-    this.consumeWhitespace();
-    this.consumeToken("{");
+    this.skipWhitespace();
+    this.expectToken("{");
 
-    this.currentType = {
+    this.currentTypeDefinition = {
       fields: {},
       endpoints: {},
       transform: undefined,
     };
 
     this.parseTypeBody();
-    this.consumeToken("}");
+    this.expectToken("}");
 
     if (
-      "endpoints" in this.currentType &&
-      Object.keys(this.currentType.endpoints).length > 0
+      "endpoints" in this.currentTypeDefinition &&
+      Object.keys(this.currentTypeDefinition.endpoints).length > 0
     ) {
-      this.schema[typeName.toLowerCase()] = this.currentType as SchemaResource;
+      this.parsedSchema[typeName.toLowerCase()] = this
+        .currentTypeDefinition as SchemaResource;
     } else {
-      if ("endpoints" in this.currentType) {
-        delete (this.currentType as any).endpoints;
+      if ("endpoints" in this.currentTypeDefinition) {
+        delete (this.currentTypeDefinition as any).endpoints;
       }
-      this.schema._types[typeName] = this.currentType as ValueType;
+      this.parsedSchema._types[typeName] = this
+        .currentTypeDefinition as ValueType;
     }
 
-    this.currentType = null;
+    this.currentTypeDefinition = null;
   }
 
+  /**
+   * Parses the body of a type definition.
+   * @private
+   */
   private parseTypeBody(): void {
-    while (this.pos < this.input.length) {
-      this.consumeWhitespace();
+    while (this.currentPosition < this.sdlInput.length) {
+      this.skipWhitespace();
 
-      if (this.peekChar() === "}") {
+      if (this.peekNextChar() === "}") {
         break;
-      } else if (this.peekChar() === "@") {
+      } else if (this.peekNextChar() === "@") {
         const directive = this.parseDirective();
-        if (directive.type === "transform" && this.currentType) {
-          this.currentType.transform = directive.value;
+        if (directive.type === "transform" && this.currentTypeDefinition) {
+          this.currentTypeDefinition.transform = directive.value;
         }
       } else {
         this.parseField();
@@ -98,18 +126,22 @@ export class SDLParser extends Logger {
     }
   }
 
+  /**
+   * Parses a field definition within a type.
+   * @private
+   */
   private parseField(): void {
     const fieldName = this.parseIdentifier();
 
-    this.consumeWhitespace();
-    this.consumeToken(":");
-    this.consumeWhitespace();
+    this.skipWhitespace();
+    this.expectToken(":");
+    this.skipWhitespace();
     const { fieldType, isNullable } = this.parseFieldType();
 
     const field: SchemaField = { type: fieldType, isNullable };
 
-    this.consumeWhitespace();
-    while (this.peekChar() === "@") {
+    this.skipWhitespace();
+    while (this.peekNextChar() === "@") {
       const directive = this.parseDirective();
       if (directive.type === "from") {
         field.from = directive.value;
@@ -118,31 +150,36 @@ export class SDLParser extends Logger {
       }
     }
 
-    if (this.currentType) {
-      this.currentType.fields[fieldName] = field;
+    if (this.currentTypeDefinition) {
+      this.currentTypeDefinition.fields[fieldName] = field;
     }
   }
 
+  /**
+   * Parses a field type, including array notations and nullability.
+   * @returns {{ fieldType: string; isNullable: boolean }} The parsed field type and nullability
+   * @private
+   */
   private parseFieldType(): { fieldType: string; isNullable: boolean } {
     let fieldType = "";
     let isNullable = true;
 
-    while (this.peekChar() === "[") {
-      this.consumeToken("[");
+    while (this.peekNextChar() === "[") {
+      this.expectToken("[");
       fieldType += "[";
-      this.consumeWhitespace();
+      this.skipWhitespace();
     }
 
     fieldType += this.parseIdentifier();
 
-    while (this.peekChar() === "]") {
-      this.consumeToken("]");
+    while (this.peekNextChar() === "]") {
+      this.expectToken("]");
       fieldType += "]";
-      this.consumeWhitespace();
+      this.skipWhitespace();
     }
 
-    if (this.peekChar() === "!") {
-      this.consumeToken("!");
+    if (this.peekNextChar() === "!") {
+      this.expectToken("!");
       isNullable = false;
       fieldType += "!";
     }
@@ -150,50 +187,63 @@ export class SDLParser extends Logger {
     return { fieldType, isNullable };
   }
 
+  /**
+   * Parses an identifier.
+   * @returns {string} The parsed identifier
+   * @private
+   */
   private parseIdentifier(): string {
-    this.consumeWhitespace();
-    const start = this.pos;
+    this.skipWhitespace();
+    const start = this.currentPosition;
     while (
-      this.pos < this.input.length &&
-      /[a-zA-Z0-9_]/.test(this.input[this.pos])
+      this.currentPosition < this.sdlInput.length &&
+      /[a-zA-Z0-9_]/.test(this.sdlInput[this.currentPosition])
     ) {
-      this.pos++;
+      this.currentPosition++;
     }
-    if (start === this.pos) {
+    if (start === this.currentPosition) {
       const errorMsg = `Expected identifier at position ${
-        this.pos
+        this.currentPosition
       }. Context: ${this.getErrorContext()}`;
       this.error(errorMsg);
       throw new Error(errorMsg);
     }
-    return this.input.slice(start, this.pos);
+    return this.sdlInput.slice(start, this.currentPosition);
   }
 
+  /**
+   * Parses a directive in the SDL.
+   * @returns {{ type: string; value: string }} The parsed directive
+   * @private
+   */
   private parseDirective(): { type: string; value: string } {
-    this.consumeToken("@");
+    this.expectToken("@");
     const directiveName = this.parseIdentifier();
-    this.consumeWhitespace();
-    this.consumeToken("(");
+    this.skipWhitespace();
+    this.expectToken("(");
 
     if (directiveName === "from" || directiveName === "transform") {
       const value = this.parseString();
-      this.consumeToken(")");
+      this.expectToken(")");
       return { type: directiveName, value };
     } else if (directiveName === "endpoint") {
       const method = this.parseIdentifier() as HttpMethod;
-      this.consumeWhitespace();
-      this.consumeToken(",");
-      this.consumeWhitespace();
+      this.skipWhitespace();
+      this.expectToken(",");
+      this.skipWhitespace();
       const path = this.parseString();
-      this.consumeWhitespace();
-      this.consumeToken(",");
-      this.consumeWhitespace();
+      this.skipWhitespace();
+      this.expectToken(",");
+      this.skipWhitespace();
       const dataPath = this.parseString();
-      this.consumeToken(")");
+      this.expectToken(")");
 
-      if (this.currentType && "endpoints" in this.currentType) {
-        this.currentType.endpoints[method] = { method, path };
-        this.currentType.dataPath = dataPath;
+      if (
+        this.currentTypeDefinition &&
+        "endpoints" in this.currentTypeDefinition
+      ) {
+        this.currentTypeDefinition.endpoints[method] = { method, path };
+        this.currentTypeDefinition.dataPath = dataPath;
       } else {
         this.warn("No current resource to add endpoint to");
       }
@@ -206,49 +256,86 @@ export class SDLParser extends Logger {
     throw new Error(errorMsg);
   }
 
+  /**
+   * Parses a string literal.
+   * @returns {string} The parsed string
+   * @private
+   */
   private parseString(): string {
-    this.consumeToken('"');
-    const start = this.pos;
-    while (this.input[this.pos] !== '"') {
-      if (this.pos >= this.input.length) {
+    this.expectToken('"');
+    const start = this.currentPosition;
+    while (this.sdlInput[this.currentPosition] !== '"') {
+      if (this.currentPosition >= this.sdlInput.length) {
         throw new Error("Unterminated string");
       }
-      this.pos++;
+      this.currentPosition++;
     }
-    const value = this.input.slice(start, this.pos);
-    this.consumeToken('"');
+    const value = this.sdlInput.slice(start, this.currentPosition);
+    this.expectToken('"');
     return value;
   }
 
-  private consumeToken(expected: string): void {
-    this.consumeWhitespace();
-    if (this.input.slice(this.pos, this.pos + expected.length) !== expected) {
-      const errorMsg = `Expected "${expected}" but found "${this.input.slice(
-        this.pos,
-        this.pos + expected.length || 1
-      )}" at position ${this.pos}. Context: ${this.getErrorContext()}`;
+  /**
+   * Consumes an expected token from the input.
+   * @param {string} expected - The expected token
+   * @throws {Error} If the expected token is not found
+   * @private
+   */
+  private expectToken(expected: string): void {
+    this.skipWhitespace();
+    if (
+      this.sdlInput.slice(
+        this.currentPosition,
+        this.currentPosition + expected.length
+      ) !== expected
+    ) {
+      const errorMsg = `Expected "${expected}" but found "${this.sdlInput.slice(
+        this.currentPosition,
+        this.currentPosition + expected.length || 1
+      )}" at position ${
+        this.currentPosition
+      }. Context: ${this.getErrorContext()}`;
       this.error(errorMsg);
       throw new Error(errorMsg);
     }
-    this.pos += expected.length;
+    this.currentPosition += expected.length;
   }
 
-  private consumeWhitespace(): void {
-    while (this.pos < this.input.length && /\s/.test(this.input[this.pos])) {
-      this.pos++;
+  /**
+   * Skips whitespace characters in the input.
+   * @private
+   */
+  private skipWhitespace(): void {
+    while (
+      this.currentPosition < this.sdlInput.length &&
+      /\s/.test(this.sdlInput[this.currentPosition])
+    ) {
+      this.currentPosition++;
     }
   }
 
-  private peekChar(): string {
-    return this.pos < this.input.length ? this.input[this.pos] : "";
+  /**
+   * Peeks at the next character in the input without consuming it.
+   * @returns {string} The next character or an empty string if at the end of input
+   * @private
+   */
+  private peekNextChar(): string {
+    return this.currentPosition < this.sdlInput.length
+      ? this.sdlInput[this.currentPosition]
+      : "";
   }
 
+  /**
+   * Gets the context around the current position for error reporting.
+   * @returns {string} The context string
+   * @private
+   */
   private getErrorContext(): string {
-    const start = Math.max(0, this.pos - 20);
-    const end = Math.min(this.input.length, this.pos + 20);
-    return `...${this.input.slice(start, this.pos)}[HERE>${this.input.slice(
-      this.pos,
-      end
-    )}...`;
+    const start = Math.max(0, this.currentPosition - 20);
+    const end = Math.min(this.sdlInput.length, this.currentPosition + 20);
+    return `...${this.sdlInput.slice(
+      start,
+      this.currentPosition
+    )}[HERE>${this.sdlInput.slice(this.currentPosition, end)}...`;
   }
 }

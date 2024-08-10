@@ -19,6 +19,10 @@ import { ValidationError } from "./validation/errors";
 import { SchemaValidator } from "./validation/SchemaValidator";
 import lodashGet from "lodash.get";
 
+/**
+ * RestQL class for executing and managing REST API queries.
+ * @extends Logger
+ */
 export class RestQL extends Logger {
   private schema: Schema;
   private baseUrls: BaseUrls;
@@ -32,6 +36,14 @@ export class RestQL extends Logger {
   private schemaValidator: SchemaValidator;
   private debugMode: boolean;
 
+  /**
+   * Creates an instance of RestQL.
+   * @param {string} sdl - The Schema Definition Language string
+   * @param {BaseUrls} baseUrls - The base URLs for API endpoints
+   * @param {RestQLOptions} [options={}] - Configuration options for RestQL
+   * @param {{ [key: string]: Function }} [transformers={}] - Custom transformer functions
+   * @param {boolean} [debugMode=false] - Whether to enable debug mode
+   */
   constructor(
     sdl: string,
     baseUrls: BaseUrls,
@@ -52,29 +64,17 @@ export class RestQL extends Logger {
     };
     this.debugMode = debugMode;
 
-    this.sdlParser = new SDLParser(sdl);
-    try {
-      this.schema = this.sdlParser.parseSDL();
-      this.schemaValidator = new SchemaValidator(transformers);
-      this.schemaValidator.validateSchema(this.schema);
-    } catch (error) {
-      this.error("Error parsing or validating schema:", error);
-      throw error;
-    }
-
-    this.queryParser = new RestQLParser();
-    this.cacheManager = new CacheManager(this.options.cacheTimeout);
-    this.batchManager = new BatchManager(
-      this.options.batchInterval,
-      this.options.maxBatchSize
-    );
-    this.executor = new RestQLExecutor({
-      baseUrls: this.baseUrls,
-      headers: this.options.headers,
-    });
-    this.transformers = transformers;
+    this.initializeComponents(sdl, transformers);
   }
 
+  /**
+   * Executes a RestQL operation.
+   * @param {string} operationString - The operation string to execute
+   * @param {{ [key: string]: any }} [variables={}] - Variables for the operation
+   * @param {{ useCache?: boolean }} [options={}] - Execution options
+   * @returns {Promise<any | any[]>} The result of the operation
+   * @throws {ValidationError} If the operation type is unsupported
+   */
   async execute(
     operationString: string,
     variables: { [key: string]: any } = {},
@@ -88,13 +88,9 @@ export class RestQL extends Logger {
     const parsedOperation = this.queryParser.parse(operationString);
     this.log("Parsed operation:", parsedOperation);
 
-    // Filter out undefined variables
-    const definedVariables = Object.fromEntries(
-      Object.entries(variables).filter(([_, value]) => value !== undefined)
-    );
+    const definedVariables = this.filterDefinedVariables(variables);
     this.log("Defined variables:", definedVariables);
 
-    // Validate only the defined variables
     this.validateVariables(parsedOperation.variables, definedVariables);
 
     if (parsedOperation.operationType === "query") {
@@ -119,6 +115,13 @@ export class RestQL extends Logger {
     }
   }
 
+  /**
+   * Validates the provided variables against the declared variables.
+   * @param {{ [key: string]: VariableDefinition }} declaredVariables - The variables declared in the operation
+   * @param {{ [key: string]: any }} providedVariables - The variables provided for execution
+   * @throws {ValidationError} If a required variable is not provided
+   * @private
+   */
   private validateVariables(
     declaredVariables: { [key: string]: VariableDefinition },
     providedVariables: { [key: string]: any }
@@ -139,6 +142,14 @@ export class RestQL extends Logger {
     this.log("Variable validation completed successfully");
   }
 
+  /**
+   * Executes a query operation.
+   * @param {ParsedOperation} parsedOperation - The parsed query operation
+   * @param {VariableValues} variables - The variables for the query
+   * @param {boolean} useCache - Whether to use caching
+   * @returns {Promise<{ shapedData: any; rawResponses: { [key: string]: any } }>} The query results
+   * @private
+   */
   private async executeQuery(
     parsedOperation: ParsedOperation,
     variables: VariableValues,
@@ -184,6 +195,13 @@ export class RestQL extends Logger {
     return { shapedData: results, rawResponses };
   }
 
+  /**
+   * Executes a mutation operation.
+   * @param {ParsedOperation} parsedOperation - The parsed mutation operation
+   * @param {VariableValues} variables - The variables for the mutation
+   * @returns {Promise<any[]>} The mutation results
+   * @private
+   */
   private async executeMutation(
     parsedOperation: ParsedOperation,
     variables: VariableValues
@@ -242,6 +260,13 @@ export class RestQL extends Logger {
     return results;
   }
 
+  /**
+   * Parses the mutation type from the mutation name.
+   * @param {string} mutationName - The name of the mutation
+   * @returns {[string, string]} The operation type and resource name
+   * @throws {Error} If the mutation type is unknown
+   * @private
+   */
   private parseMutationType(mutationName: string): [string, string] {
     const operationTypes = ["create", "update", "patch", "delete"];
     for (const opType of operationTypes) {
@@ -252,6 +277,13 @@ export class RestQL extends Logger {
     throw new Error(`Unknown mutation type: ${mutationName}`);
   }
 
+  /**
+   * Gets the HTTP method for a given operation type.
+   * @param {string} operationType - The type of operation
+   * @returns {HttpMethod} The corresponding HTTP method
+   * @throws {Error} If the operation type is unsupported
+   * @private
+   */
   private getHttpMethodForOperation(operationType: string): HttpMethod {
     switch (operationType) {
       case "create":
@@ -267,6 +299,13 @@ export class RestQL extends Logger {
     }
   }
 
+  /**
+   * Cherry-picks fields from the data based on the requested fields.
+   * @param {any} data - The data to pick fields from
+   * @param {any} fields - The fields to pick
+   * @returns {any} The picked data
+   * @private
+   */
   private cherryPickFields(data: any, fields: any): any {
     this.log("cherryPickFields called with:", { data, fields });
 
@@ -314,6 +353,16 @@ export class RestQL extends Logger {
     return result;
   }
 
+  /**
+   * Shapes the data according to the schema and requested fields.
+   * @param {any} data - The raw data to shape
+   * @param {ParsedQuery} query - The parsed query
+   * @param {SchemaResource | ValueType} resourceSchema - The schema for the resource
+   * @param {VariableValues} variables - The variables for the query
+   * @param {{ [key: string]: any }} [rawResponses={}] - The raw responses
+   * @returns {Promise<any>} The shaped data
+   * @private
+   */
   private async shapeData(
     data: any,
     query: ParsedQuery,
@@ -370,6 +419,8 @@ export class RestQL extends Logger {
           }
         } else if (typeof fieldValue === "object" && fieldValue.fields) {
           const nestedType = fieldSchema.type.replace(/[\[\]!]/g, "");
+        } else if (typeof fieldValue === "object" && fieldValue.fields) {
+          const nestedType = fieldSchema.type.replace(/[\[\]!]/g, "");
           const nestedSchema = this.schema._types[nestedType];
           if (nestedSchema) {
             rawValue = await this.shapeData(
@@ -421,6 +472,14 @@ export class RestQL extends Logger {
     return shapedData;
   }
 
+  /**
+   * Coerces a value to the specified type according to the field schema.
+   * @param {any} value - The value to coerce
+   * @param {SchemaField} fieldSchema - The schema for the field
+   * @returns {any} The coerced value
+   * @throws {ValidationError} If the value cannot be coerced or is null for a non-nullable field
+   * @private
+   */
   private coerceValue(value: any, fieldSchema: SchemaField): any {
     const { type, isNullable } = fieldSchema;
 
@@ -452,6 +511,17 @@ export class RestQL extends Logger {
     }
   }
 
+  /**
+   * Executes a query for a specific field.
+   * @param {string} fieldName - The name of the field
+   * @param {any} fields - The fields to retrieve
+   * @param {any} args - The arguments for the query
+   * @param {VariableValues} variables - The variables for the query
+   * @param {SchemaResource} resourceSchema - The schema for the resource
+   * @returns {Promise<{ shapedData: any; rawResponse: any }>} The query result
+   * @throws {Error} If the endpoint is not found or if there's an error during execution
+   * @private
+   */
   private async executeQueryField(
     fieldName: string,
     fields: any,
@@ -504,11 +574,26 @@ export class RestQL extends Logger {
     }
   }
 
+  /**
+   * Extracts a nested value from data using a dot-notated path.
+   * @param {any} data - The data to extract from
+   * @param {string} path - The dot-notated path to the desired value
+   * @returns {any} The extracted value
+   * @private
+   */
   private extractNestedValue(data: any, path: string): any {
-    const value = lodashGet(data, path);
-    return value;
+    return lodashGet(data, path);
   }
 
+  /**
+   * Shapes nested arrays according to the field schema.
+   * @param {any[]} rawValue - The raw array value
+   * @param {any} fieldValue - The field value from the query
+   * @param {SchemaResource | ValueType} itemSchema - The schema for the array items
+   * @param {string} fieldType - The type of the field
+   * @returns {any[]} The shaped array
+   * @private
+   */
   private shapeNestedArrays(
     rawValue: any[],
     fieldValue: any,
@@ -535,6 +620,14 @@ export class RestQL extends Logger {
     }
   }
 
+  /**
+   * Generates a cache key for a query.
+   * @param {string} fieldName - The name of the field
+   * @param {any} args - The arguments for the query
+   * @param {VariableValues} variables - The variables for the query
+   * @returns {string} The generated cache key
+   * @private
+   */
   private getCacheKey(
     fieldName: string,
     args: any,
@@ -544,6 +637,13 @@ export class RestQL extends Logger {
     return `${fieldName}:${JSON.stringify(resolvedArgs)}`;
   }
 
+  /**
+   * Resolves variables in the arguments.
+   * @param {{ [key: string]: string }} args - The arguments containing variable references
+   * @param {{ [key: string]: any }} variables - The variables to resolve
+   * @returns {{ [key: string]: any }} The resolved arguments
+   * @private
+   */
   private resolveVariables(
     args: { [key: string]: string },
     variables: { [key: string]: any }
@@ -562,5 +662,53 @@ export class RestQL extends Logger {
       }
     }
     return resolved;
+  }
+
+  /**
+   * Initializes the components of RestQL.
+   * @param {string} sdl - The Schema Definition Language string
+   * @param {{ [key: string]: Function }} transformers - Custom transformer functions
+   * @throws {Error} If there's an error parsing or validating the schema
+   * @private
+   */
+  private initializeComponents(
+    sdl: string,
+    transformers: { [key: string]: Function }
+  ): void {
+    this.sdlParser = new SDLParser(sdl);
+    try {
+      this.schema = this.sdlParser.parseSDL();
+      this.schemaValidator = new SchemaValidator(transformers);
+      this.schemaValidator.validateSchema(this.schema);
+    } catch (error) {
+      this.error("Error parsing or validating schema:", error);
+      throw error;
+    }
+
+    this.queryParser = new RestQLParser();
+    this.cacheManager = new CacheManager(this.options.cacheTimeout);
+    this.batchManager = new BatchManager(
+      this.options.batchInterval,
+      this.options.maxBatchSize
+    );
+    this.executor = new RestQLExecutor({
+      baseUrls: this.baseUrls,
+      headers: this.options.headers,
+    });
+    this.transformers = transformers;
+  }
+
+  /**
+   * Filters out undefined variables from the provided variables object.
+   * @param {{ [key: string]: any }} variables - The variables to filter
+   * @returns {{ [key: string]: any }} The filtered variables
+   * @private
+   */
+  private filterDefinedVariables(variables: { [key: string]: any }): {
+    [key: string]: any;
+  } {
+    return Object.fromEntries(
+      Object.entries(variables).filter(([_, value]) => value !== undefined)
+    );
   }
 }
