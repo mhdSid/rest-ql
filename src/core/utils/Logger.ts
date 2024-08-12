@@ -4,6 +4,11 @@
 export class Logger {
   private loggerContext: string;
   private isDebugModeEnabled: boolean;
+  private logMethod: (...args: any[]) => void;
+  private warnMethod: (...args: any[]) => void;
+  private errorMethod: (...args: any[]) => void;
+  private debugMethod: (...args: any[]) => void;
+  private infoMethod: (...args: any[]) => void;
 
   /**
    * Creates an instance of Logger.
@@ -12,7 +17,18 @@ export class Logger {
    */
   constructor(context: string, debugMode: boolean) {
     this.loggerContext = context;
-    this.isDebugModeEnabled = this.isDebugModeEnabled ? true : debugMode;
+    this.isDebugModeEnabled = debugMode;
+
+    if (this.isDebugModeEnabled) {
+      this.logMethod = console.log.bind(console, `[${this.loggerContext}]`);
+      this.warnMethod = console.warn.bind(console, `[${this.loggerContext}]`);
+      this.errorMethod = console.error.bind(console, `[${this.loggerContext}]`);
+      this.debugMethod = console.debug.bind(console, `[${this.loggerContext}]`);
+      this.infoMethod = console.info.bind(console, `[${this.loggerContext}]`);
+    } else {
+      const noOp = () => {};
+      this.logMethod = this.warnMethod = this.errorMethod = this.debugMethod = this.infoMethod = noOp;
+    }
   }
 
   /**
@@ -20,8 +36,7 @@ export class Logger {
    * @param {...any} messageParts - The parts of the message to log
    */
   log(...messageParts: any[]): void {
-    if (!this.isDebugModeEnabled) return;
-    console.log(`[${this.loggerContext}]`, ...messageParts);
+    this.logMethod(...messageParts);
   }
 
   /**
@@ -29,8 +44,7 @@ export class Logger {
    * @param {...any} messageParts - The parts of the warning message to log
    */
   warn(...messageParts: any[]): void {
-    if (!this.isDebugModeEnabled) return;
-    console.warn(`[${this.loggerContext}]`, ...messageParts);
+    this.warnMethod(...messageParts);
   }
 
   /**
@@ -38,8 +52,7 @@ export class Logger {
    * @param {...any} messageParts - The parts of the error message to log
    */
   error(...messageParts: any[]): void {
-    if (!this.isDebugModeEnabled) return;
-    console.error(`[${this.loggerContext}]`, ...messageParts);
+    this.errorMethod(...messageParts);
   }
 
   /**
@@ -47,8 +60,7 @@ export class Logger {
    * @param {...any} messageParts - The parts of the debug message to log
    */
   debug(...messageParts: any[]): void {
-    if (!this.isDebugModeEnabled) return;
-    console.debug(`[${this.loggerContext}]`, ...messageParts);
+    this.debugMethod(...messageParts);
   }
 
   /**
@@ -56,7 +68,6 @@ export class Logger {
    * @param {...any} messageParts - The parts of the info message to log
    */
   info(...messageParts: any[]): void {
-    if (!this.isDebugModeEnabled) return;
-    console.info(`[${this.loggerContext}]`, ...messageParts);
+    this.infoMethod(...messageParts);
   }
 }
