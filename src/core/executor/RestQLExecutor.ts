@@ -1,29 +1,29 @@
-import { Logger } from "../utils/Logger";
-import { NetworkError } from "../validation/errors";
+import { Logger } from '../utils/Logger'
+import { NetworkError } from '../validation/errors'
 import {
   HttpMethod,
   RestQLExecutorOptions,
   ParsedQuery,
   SchemaResource,
-  VariableValues,
-} from "../types";
+  VariableValues
+} from '../types'
 
 /**
  * RestQLExecutor class for executing REST queries based on provided schemas and variables.
  * @extends Logger
  */
 export class RestQLExecutor extends Logger {
-  private apiBaseUrls: { [key: string]: string };
-  private defaultHeaders: { [key: string]: string };
+  private apiBaseUrls: { [key: string]: string }
+  private defaultHeaders: { [key: string]: string }
 
   /**
    * Creates an instance of RestQLExecutor.
    * @param {RestQLExecutorOptions} options - Configuration options for the executor
    */
-  constructor({ baseUrls, headers }: RestQLExecutorOptions) {
-    super("RestQLExecutor");
-    this.apiBaseUrls = baseUrls;
-    this.defaultHeaders = headers;
+  constructor ({ baseUrls, headers }: RestQLExecutorOptions) {
+    super('RestQLExecutor')
+    this.apiBaseUrls = baseUrls
+    this.defaultHeaders = headers
   }
 
   /**
@@ -35,25 +35,25 @@ export class RestQLExecutor extends Logger {
    * @returns {Promise<any>} The response data from the API
    * @throws {Error} If the endpoint is not found or if the network request fails
    */
-  async execute(
+  async execute (
     parsedQuery: ParsedQuery,
     resourceSchema: SchemaResource,
     variableValues: VariableValues,
     httpMethod: HttpMethod
   ): Promise<any> {
-    this.log("Executing query:", {
+    this.log('Executing query:', {
       parsedQuery,
       resourceSchema,
       variableValues,
-      httpMethod,
-    });
+      httpMethod
+    })
 
-    const endpointConfig = this.getEndpointConfig(resourceSchema, httpMethod, parsedQuery.queryName);
-    const fullUrl = this.constructFullUrl(endpointConfig.path, variableValues);
-    const resolvedQueryArgs = this.resolveQueryArguments(parsedQuery.args, variableValues);
+    const endpointConfig = this.getEndpointConfig(resourceSchema, httpMethod, parsedQuery.queryName)
+    const fullUrl = this.constructFullUrl(endpointConfig.path, variableValues)
+    const resolvedQueryArgs = this.resolveQueryArguments(parsedQuery.args, variableValues)
 
-    const apiResponse = await this.performApiRequest(fullUrl, httpMethod, resolvedQueryArgs);
-    return apiResponse.json();
+    const apiResponse = await this.performApiRequest(fullUrl, httpMethod, resolvedQueryArgs)
+    return apiResponse.json()
   }
 
   /**
@@ -65,14 +65,14 @@ export class RestQLExecutor extends Logger {
    * @throws {Error} If no endpoint is found for the given method and resource
    * @private
    */
-  private getEndpointConfig(resourceSchema: SchemaResource, httpMethod: HttpMethod, queryName: string): any {
-    const endpointConfig = resourceSchema.endpoints[httpMethod];
+  private getEndpointConfig (resourceSchema: SchemaResource, httpMethod: HttpMethod, queryName: string): any {
+    const endpointConfig = resourceSchema.endpoints[httpMethod]
     if (!endpointConfig) {
-      const errorMessage = `No ${httpMethod} endpoint found for resource "${queryName}".`;
-      this.error(errorMessage);
-      throw new Error(errorMessage);
+      const errorMessage = `No ${httpMethod} endpoint found for resource "${queryName}".`
+      this.error(errorMessage)
+      throw new Error(errorMessage)
     }
-    return endpointConfig;
+    return endpointConfig
   }
 
   /**
@@ -82,17 +82,17 @@ export class RestQLExecutor extends Logger {
    * @returns {string} The fully constructed URL
    * @private
    */
-  private constructFullUrl(pathTemplate: string, variableValues: { [key: string]: any }): string {
-    this.log("Constructing URL from template:", { pathTemplate, variableValues });
+  private constructFullUrl (pathTemplate: string, variableValues: { [key: string]: any }): string {
+    this.log('Constructing URL from template:', { pathTemplate, variableValues })
 
-    const baseUrl = this.getBaseUrl(pathTemplate);
-    let fullUrl = this.combineBaseAndPath(baseUrl, pathTemplate);
+    const baseUrl = this.getBaseUrl(pathTemplate)
+    let fullUrl = this.combineBaseAndPath(baseUrl, pathTemplate)
 
-    fullUrl = this.replacePathVariables(fullUrl, variableValues);
-    fullUrl = this.removeTrailingSlashes(fullUrl);
+    fullUrl = this.replacePathVariables(fullUrl, variableValues)
+    fullUrl = this.removeTrailingSlashes(fullUrl)
 
-    this.log("Constructed URL:", fullUrl);
-    return fullUrl;
+    this.log('Constructed URL:', fullUrl)
+    return fullUrl
   }
 
   /**
@@ -102,14 +102,14 @@ export class RestQLExecutor extends Logger {
    * @throws {Error} If no base URL is found and no default is provided
    * @private
    */
-  private getBaseUrl(path: string): string {
-    const baseUrl = this.apiBaseUrls[path] || this.apiBaseUrls.default;
+  private getBaseUrl (path: string): string {
+    const baseUrl = this.apiBaseUrls[path] || this.apiBaseUrls.default
     if (!baseUrl) {
-      const errorMessage = `No base URL found for path: ${path} and no default URL provided`;
-      this.error(errorMessage);
-      throw new Error(errorMessage);
+      const errorMessage = `No base URL found for path: ${path} and no default URL provided`
+      this.error(errorMessage)
+      throw new Error(errorMessage)
     }
-    return baseUrl;
+    return baseUrl
   }
 
   /**
@@ -119,10 +119,10 @@ export class RestQLExecutor extends Logger {
    * @returns {string} The combined URL
    * @private
    */
-  private combineBaseAndPath(baseUrl: string, path: string): string {
-    return baseUrl.endsWith("/") || path.startsWith("/")
+  private combineBaseAndPath (baseUrl: string, path: string): string {
+    return baseUrl.endsWith('/') || path.startsWith('/')
       ? baseUrl + path
-      : baseUrl + "/" + path;
+      : baseUrl + '/' + path
   }
 
   /**
@@ -132,10 +132,10 @@ export class RestQLExecutor extends Logger {
    * @returns {string} The URL with variables replaced
    * @private
    */
-  private replacePathVariables(url: string, variables: { [key: string]: any }): string {
+  private replacePathVariables (url: string, variables: { [key: string]: any }): string {
     return url.replace(/{(\w+)}/g, (_, key) =>
-      variables[key] !== undefined ? encodeURIComponent(variables[key]) : ""
-    );
+      variables[key] !== undefined ? encodeURIComponent(variables[key]) : ''
+    )
   }
 
   /**
@@ -144,8 +144,8 @@ export class RestQLExecutor extends Logger {
    * @returns {string} The URL without trailing slashes
    * @private
    */
-  private removeTrailingSlashes(url: string): string {
-    return url.replace(/\/+$/, "");
+  private removeTrailingSlashes (url: string): string {
+    return url.replace(/\/+$/, '')
   }
 
   /**
@@ -155,14 +155,14 @@ export class RestQLExecutor extends Logger {
    * @returns {Object} The resolved query arguments
    * @private
    */
-  private resolveQueryArguments(args: { [key: string]: any }, variableValues: { [key: string]: any }): { [key: string]: any } {
-    const resolvedArgs: { [key: string]: any } = {};
+  private resolveQueryArguments (args: { [key: string]: any }, variableValues: { [key: string]: any }): { [key: string]: any } {
+    const resolvedArgs: { [key: string]: any } = {}
     for (const [key, value] of Object.entries(args)) {
-      resolvedArgs[key] = typeof value === "string" && value.startsWith("$")
+      resolvedArgs[key] = typeof value === 'string' && value.startsWith('$')
         ? variableValues[value.slice(1)]
-        : value;
+        : value
     }
-    return resolvedArgs;
+    return resolvedArgs
   }
 
   /**
@@ -174,27 +174,27 @@ export class RestQLExecutor extends Logger {
    * @throws {NetworkError} If the request fails
    * @private
    */
-  private async performApiRequest(
+  private async performApiRequest (
     url: string,
     httpMethod: HttpMethod,
     queryArgs: any
   ): Promise<Response> {
-    const requestOptions: RequestInit = this.prepareRequestOptions(httpMethod, queryArgs);
+    const requestOptions: RequestInit = this.prepareRequestOptions(httpMethod, queryArgs)
 
     if (httpMethod === HttpMethod.GET) {
-      url = this.appendQueryString(url, queryArgs);
+      url = this.appendQueryString(url, queryArgs)
     }
 
-    this.log(`Sending ${httpMethod} request to ${url}`);
-    const response = await fetch(url, requestOptions);
+    this.log(`Sending ${httpMethod} request to ${url}`)
+    const response = await fetch(url, requestOptions)
 
     if (!response.ok) {
-      const errorMessage = `Request to ${url} failed with status ${response.status}`;
-      this.error(errorMessage);
-      throw new NetworkError(errorMessage);
+      const errorMessage = `Request to ${url} failed with status ${response.status}`
+      this.error(errorMessage)
+      throw new NetworkError(errorMessage)
     }
 
-    return response;
+    return response
   }
 
   /**
@@ -204,24 +204,24 @@ export class RestQLExecutor extends Logger {
    * @returns {RequestInit} The prepared request options
    * @private
    */
-  private prepareRequestOptions(httpMethod: HttpMethod, queryArgs: any): RequestInit {
+  private prepareRequestOptions (httpMethod: HttpMethod, queryArgs: any): RequestInit {
     const options: RequestInit = {
       method: httpMethod,
       headers: {
         ...this.defaultHeaders,
-        "Content-Type": "application/json",
-      },
-    };
+        'Content-Type': 'application/json'
+      }
+    }
 
     if (httpMethod !== HttpMethod.GET && Object.keys(queryArgs).length > 0) {
       options.body = JSON.stringify(
         Object.fromEntries(
           Object.entries(queryArgs).filter(([_, v]) => v !== undefined)
         )
-      );
+      )
     }
 
-    return options;
+    return options
   }
 
   /**
@@ -231,14 +231,14 @@ export class RestQLExecutor extends Logger {
    * @returns {string} The URL with appended query string
    * @private
    */
-  private appendQueryString(url: string, queryArgs: any): string {
-    const queryParams = new URLSearchParams();
+  private appendQueryString (url: string, queryArgs: any): string {
+    const queryParams = new URLSearchParams()
     for (const [key, value] of Object.entries(queryArgs)) {
       if (value !== undefined) {
-        queryParams.append(key, value.toString());
+        queryParams.append(key, value.toString())
       }
     }
-    const queryString = queryParams.toString();
-    return queryString ? `${url}?${queryString}` : url;
+    const queryString = queryParams.toString()
+    return queryString ? `${url}?${queryString}` : url
   }
 }

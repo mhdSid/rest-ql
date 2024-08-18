@@ -1,9 +1,9 @@
 export enum HttpMethod {
-  GET = "GET",
-  POST = "POST",
-  PUT = "PUT",
-  DELETE = "DELETE",
-  PATCH = "PATCH",
+  GET = 'GET',
+  POST = 'POST',
+  PUT = 'PUT',
+  DELETE = 'DELETE',
+  PATCH = 'PATCH',
 }
 
 export interface Schema {
@@ -50,7 +50,7 @@ export interface RestQLOptions {
 }
 
 export interface ParsedOperation {
-  operationType: "query" | "mutation";
+  operationType: 'query' | 'mutation';
   operationName: string;
   variables: { [key: string]: { type: string } };
   queries: ParsedQuery[];
@@ -85,7 +85,7 @@ export interface Token {
 
 export type Subscriber = (data: any) => void;
 
-export type EventType = "query" | "mutation";
+export type EventType = 'query' | 'mutation';
 
 export type CompiledOperation = (variables: VariableValues) => Promise<any>;
 

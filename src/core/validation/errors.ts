@@ -7,9 +7,9 @@ export class RestQLError extends Error {
    * Creates a new RestQLError instance.
    * @param {string} errorMessage - The error message
    */
-  constructor(errorMessage: string) {
-    super(errorMessage);
-    this.name = "RestQLError";
+  constructor (errorMessage: string) {
+    super(errorMessage)
+    this.name = 'RestQLError'
   }
 }
 
@@ -22,9 +22,9 @@ export class NetworkError extends RestQLError {
    * Creates a new NetworkError instance.
    * @param {string} errorMessage - The error message describing the network issue
    */
-  constructor(errorMessage: string) {
-    super(errorMessage);
-    this.name = "NetworkError";
+  constructor (errorMessage: string) {
+    super(errorMessage)
+    this.name = 'NetworkError'
   }
 }
 
@@ -37,9 +37,9 @@ export class ValidationError extends RestQLError {
    * Creates a new ValidationError instance.
    * @param {string} errorMessage - The error message describing the validation issue
    */
-  constructor(errorMessage: string) {
-    super(errorMessage);
-    this.name = "ValidationError";
+  constructor (errorMessage: string) {
+    super(errorMessage)
+    this.name = 'ValidationError'
   }
 }
 
@@ -52,8 +52,8 @@ export class SchemaError extends RestQLError {
    * Creates a new SchemaError instance.
    * @param {string} errorMessage - The error message describing the schema issue
    */
-  constructor(errorMessage: string) {
-    super(errorMessage);
-    this.name = "SchemaError";
+  constructor (errorMessage: string) {
+    super(errorMessage)
+    this.name = 'SchemaError'
   }
 }

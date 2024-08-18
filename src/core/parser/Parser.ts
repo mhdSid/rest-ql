@@ -1,28 +1,28 @@
-import { Logger } from "../utils/Logger";
-import { Tokenizer } from "../parser/Tokenizer";
+import { Logger } from '../utils/Logger'
+import { Tokenizer } from '../parser/Tokenizer'
 import {
   Token,
   ParsedOperation,
   TokenType,
   ParsedQuery,
-  VariableDefinition,
-} from "../types";
+  VariableDefinition
+} from '../types'
 
 /**
  * RestQLParser class for parsing RestQL operations.
  * @extends Logger
  */
 export class RestQLParser extends Logger {
-  private tokenSequence: Token[] = [];
-  private currentPosition = 0;
-  private tokenizer: Tokenizer;
+  private tokenSequence: Token[] = []
+  private currentPosition = 0
+  private tokenizer: Tokenizer
 
   /**
    * Creates an instance of RestQLParser.
    */
-  constructor() {
-    super("RestQLParser");
-    this.tokenizer = new Tokenizer();
+  constructor () {
+    super('RestQLParser')
+    this.tokenizer = new Tokenizer()
   }
 
   /**
@@ -31,28 +31,28 @@ export class RestQLParser extends Logger {
    * @returns {ParsedOperation} The parsed operation structure
    * @throws {Error} If parsing fails
    */
-  parse(operationString: string): ParsedOperation {
+  parse (operationString: string): ParsedOperation {
     try {
-      this.tokenSequence = this.tokenizer.tokenize(operationString);
-      this.currentPosition = 0;
+      this.tokenSequence = this.tokenizer.tokenize(operationString)
+      this.currentPosition = 0
 
-      const operationType = this.extractOperationType();
-      const operationName = this.extractOperationName();
-      const variables = this.extractVariables();
-      const queries = this.extractQueries();
+      const operationType = this.extractOperationType()
+      const operationName = this.extractOperationName()
+      const variables = this.extractVariables()
+      const queries = this.extractQueries()
 
       const parsedOperation: ParsedOperation = {
         operationType,
         operationName,
         variables,
-        queries,
-      };
+        queries
+      }
 
-      this.log("Parsed operation:", parsedOperation);
-      return parsedOperation;
+      this.log('Parsed operation:', parsedOperation)
+      return parsedOperation
     } catch (error) {
-      this.error("Error parsing operation:", error);
-      throw error;
+      this.error('Error parsing operation:', error)
+      throw error
     }
   }
 
@@ -61,13 +61,13 @@ export class RestQLParser extends Logger {
    * @returns {"query" | "mutation"} The operation type
    * @private
    */
-  private extractOperationType(): "query" | "mutation" {
-    const token = this.consumeToken(TokenType.IDENTIFIER);
-    const operationType = token.value.toLowerCase() as "query" | "mutation";
-    if (operationType !== "query" && operationType !== "mutation") {
-      throw new Error(`Invalid operation type: ${operationType}`);
+  private extractOperationType (): 'query' | 'mutation' {
+    const token = this.consumeToken(TokenType.IDENTIFIER)
+    const operationType = token.value.toLowerCase() as 'query' | 'mutation'
+    if (operationType !== 'query' && operationType !== 'mutation') {
+      throw new Error(`Invalid operation type: ${operationType}`)
     }
-    return operationType;
+    return operationType
   }
 
   /**
@@ -75,8 +75,8 @@ export class RestQLParser extends Logger {
    * @returns {string} The operation name
    * @private
    */
-  private extractOperationName(): string {
-    return this.consumeToken(TokenType.IDENTIFIER).value;
+  private extractOperationName (): string {
+    return this.consumeToken(TokenType.IDENTIFIER).value
   }
 
   /**
@@ -84,34 +84,34 @@ export class RestQLParser extends Logger {
    * @returns {{ [key: string]: VariableDefinition }} The extracted variables
    * @private
    */
-  private extractVariables(): { [key: string]: VariableDefinition } {
-    const variables: { [key: string]: VariableDefinition } = {};
+  private extractVariables (): { [key: string]: VariableDefinition } {
+    const variables: { [key: string]: VariableDefinition } = {}
     if (this.peekNextToken().type === TokenType.LEFT_PAREN) {
-      this.consumeToken(TokenType.LEFT_PAREN);
+      this.consumeToken(TokenType.LEFT_PAREN)
 
       while (this.peekNextToken().type !== TokenType.RIGHT_PAREN) {
-        const varName = this.consumeToken(TokenType.IDENTIFIER).value.slice(1); // Remove the '$' prefix
-        this.consumeToken(TokenType.COLON);
-        let varType = this.consumeToken(TokenType.IDENTIFIER).value;
-        const isRequired = this.peekNextToken().type === TokenType.EXCLAMATION;
+        const varName = this.consumeToken(TokenType.IDENTIFIER).value.slice(1) // Remove the '$' prefix
+        this.consumeToken(TokenType.COLON)
+        let varType = this.consumeToken(TokenType.IDENTIFIER).value
+        const isRequired = this.peekNextToken().type === TokenType.EXCLAMATION
         if (isRequired) {
-          this.consumeToken(TokenType.EXCLAMATION);
-          varType += "!";
+          this.consumeToken(TokenType.EXCLAMATION)
+          varType += '!'
         }
-        variables[varName] = { type: varType, isRequired };
+        variables[varName] = { type: varType, isRequired }
         this.log(
           `Extracted variable: ${varName}, type: ${varType}, required: ${isRequired}`
-        );
+        )
 
         if (this.peekNextToken().type === TokenType.COMMA) {
-          this.consumeToken(TokenType.COMMA);
+          this.consumeToken(TokenType.COMMA)
         }
       }
 
-      this.consumeToken(TokenType.RIGHT_PAREN);
+      this.consumeToken(TokenType.RIGHT_PAREN)
     }
-    this.log("Extracted variables:", variables);
-    return variables;
+    this.log('Extracted variables:', variables)
+    return variables
   }
 
   /**
@@ -119,16 +119,16 @@ export class RestQLParser extends Logger {
    * @returns {ParsedQuery[]} The extracted queries
    * @private
    */
-  private extractQueries(): ParsedQuery[] {
-    const queries: ParsedQuery[] = [];
-    this.consumeToken(TokenType.LEFT_BRACE);
+  private extractQueries (): ParsedQuery[] {
+    const queries: ParsedQuery[] = []
+    this.consumeToken(TokenType.LEFT_BRACE)
 
     while (this.peekNextToken().type !== TokenType.RIGHT_BRACE) {
-      queries.push(this.extractSingleQuery());
+      queries.push(this.extractSingleQuery())
     }
 
-    this.consumeToken(TokenType.RIGHT_BRACE);
-    return queries;
+    this.consumeToken(TokenType.RIGHT_BRACE)
+    return queries
   }
 
   /**
@@ -136,17 +136,17 @@ export class RestQLParser extends Logger {
    * @returns {ParsedQuery} The extracted query
    * @private
    */
-  private extractSingleQuery(): ParsedQuery {
-    const queryName = this.consumeToken(TokenType.IDENTIFIER).value;
-    let args: { [key: string]: string } = {};
+  private extractSingleQuery (): ParsedQuery {
+    const queryName = this.consumeToken(TokenType.IDENTIFIER).value
+    let args: { [key: string]: string } = {}
 
     if (this.peekNextToken().type === TokenType.LEFT_PAREN) {
-      args = this.extractArguments();
+      args = this.extractArguments()
     }
 
-    const fields = this.extractFields();
+    const fields = this.extractFields()
 
-    return { queryName, args, fields };
+    return { queryName, args, fields }
   }
 
   /**
@@ -154,37 +154,37 @@ export class RestQLParser extends Logger {
    * @returns {{ [key: string]: any }} The extracted fields
    * @private
    */
-  private extractFields(): { [key: string]: any } {
-    const fields: { [key: string]: any } = {};
-    this.consumeToken(TokenType.LEFT_BRACE);
+  private extractFields (): { [key: string]: any } {
+    const fields: { [key: string]: any } = {}
+    this.consumeToken(TokenType.LEFT_BRACE)
 
     while (this.peekNextToken().type !== TokenType.RIGHT_BRACE) {
-      const fieldName = this.consumeToken(TokenType.IDENTIFIER).value;
+      const fieldName = this.consumeToken(TokenType.IDENTIFIER).value
 
-      let fieldArgs = {};
+      let fieldArgs = {}
       if (this.peekNextToken().type === TokenType.LEFT_PAREN) {
-        fieldArgs = this.extractArguments();
+        fieldArgs = this.extractArguments()
       }
 
       if (this.peekNextToken().type === TokenType.LEFT_BRACE) {
         fields[fieldName] = {
           args: fieldArgs,
-          fields: this.extractFields(),
-        };
+          fields: this.extractFields()
+        }
       } else {
         fields[fieldName] = {
           args: fieldArgs,
-          value: true,
-        };
+          value: true
+        }
       }
 
       if (this.peekNextToken().type === TokenType.COMMA) {
-        this.consumeToken(TokenType.COMMA);
+        this.consumeToken(TokenType.COMMA)
       }
     }
 
-    this.consumeToken(TokenType.RIGHT_BRACE);
-    return fields;
+    this.consumeToken(TokenType.RIGHT_BRACE)
+    return fields
   }
 
   /**
@@ -192,23 +192,23 @@ export class RestQLParser extends Logger {
    * @returns {{ [key: string]: string }} The extracted arguments
    * @private
    */
-  private extractArguments(): { [key: string]: string } {
-    const args: { [key: string]: string } = {};
-    this.consumeToken(TokenType.LEFT_PAREN);
+  private extractArguments (): { [key: string]: string } {
+    const args: { [key: string]: string } = {}
+    this.consumeToken(TokenType.LEFT_PAREN)
 
     while (this.peekNextToken().type !== TokenType.RIGHT_PAREN) {
-      const argName = this.consumeToken(TokenType.IDENTIFIER).value;
-      this.consumeToken(TokenType.COLON);
-      const argValue = this.extractValue();
-      args[argName] = argValue;
+      const argName = this.consumeToken(TokenType.IDENTIFIER).value
+      this.consumeToken(TokenType.COLON)
+      const argValue = this.extractValue()
+      args[argName] = argValue
 
       if (this.peekNextToken().type === TokenType.COMMA) {
-        this.consumeToken(TokenType.COMMA);
+        this.consumeToken(TokenType.COMMA)
       }
     }
 
-    this.consumeToken(TokenType.RIGHT_PAREN);
-    return args;
+    this.consumeToken(TokenType.RIGHT_PAREN)
+    return args
   }
 
   /**
@@ -216,11 +216,11 @@ export class RestQLParser extends Logger {
    * @returns {string} The extracted value
    * @private
    */
-  private extractValue(): string {
-    const token = this.consumeToken(TokenType.IDENTIFIER, TokenType.STRING);
-    return token.type === TokenType.IDENTIFIER && token.value.startsWith("$")
+  private extractValue (): string {
+    const token = this.consumeToken(TokenType.IDENTIFIER, TokenType.STRING)
+    return token.type === TokenType.IDENTIFIER && token.value.startsWith('$')
       ? token.value
-      : token.value;
+      : token.value
   }
 
   /**
@@ -230,24 +230,24 @@ export class RestQLParser extends Logger {
    * @throws {Error} If the token doesn't match the expected types or if the end of input is reached
    * @private
    */
-  private consumeToken(...expectedTypes: TokenType[]): Token {
+  private consumeToken (...expectedTypes: TokenType[]): Token {
     if (this.currentPosition >= this.tokenSequence.length) {
-      throw new Error("Unexpected end of input");
+      throw new Error('Unexpected end of input')
     }
 
-    const token = this.tokenSequence[this.currentPosition];
+    const token = this.tokenSequence[this.currentPosition]
     if (!expectedTypes.includes(token.type)) {
       const errorMessage = `Unexpected token: ${token.value} (${
         TokenType[token.type]
       }) at position ${token.pos}. Expected: ${expectedTypes
         .map((t) => TokenType[t])
-        .join(" or ")}`;
-      this.error(errorMessage);
-      throw new Error(errorMessage);
+        .join(' or ')}`
+      this.error(errorMessage)
+      throw new Error(errorMessage)
     }
 
-    this.currentPosition++;
-    return token;
+    this.currentPosition++
+    return token
   }
 
   /**
@@ -255,13 +255,13 @@ export class RestQLParser extends Logger {
    * @returns {Token} The next token or an EOF token if the end is reached
    * @private
    */
-  private peekNextToken(): Token {
+  private peekNextToken (): Token {
     return (
       this.tokenSequence[this.currentPosition] || {
         type: TokenType.EOF,
-        value: "",
-        pos: -1,
+        value: '',
+        pos: -1
       }
-    );
+    )
   }
 }

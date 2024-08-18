@@ -1,15 +1,15 @@
-import { Logger } from "../utils/Logger";
-import { BatchManagerOptions } from "../types";
+import { Logger } from '../utils/Logger'
+import { BatchManagerOptions } from '../types'
 
 /**
  * BatchManager class for managing batched asynchronous operations.
  * @extends Logger
  */
 export class BatchManager extends Logger {
-  private batchIntervalMs: number;
-  private operationsByKey: { [key: string]: (() => Promise<any>)[] };
-  private batchTimer: NodeJS.Timeout | null;
-  private maxOperationsPerBatch: number;
+  private batchIntervalMs: number
+  private operationsByKey: { [key: string]: Array<{ operation: () => Promise<any>, reject: (reason?: any) => void }> }
+  private batchTimer: number | null
+  private maxOperationsPerBatch: number
 
   /**
    * Creates an instance of BatchManager.
@@ -17,12 +17,12 @@ export class BatchManager extends Logger {
    * @param {number} options.batchInterval - The interval in milliseconds between batch executions
    * @param {number} [options.maxBatchSize=Infinity] - The maximum number of operations per batch
    */
-  constructor({ batchInterval, maxBatchSize = Infinity }: BatchManagerOptions) {
-    super("BatchManager");
-    this.batchIntervalMs = batchInterval;
-    this.operationsByKey = {};
-    this.batchTimer = null;
-    this.maxOperationsPerBatch = maxBatchSize;
+  constructor ({ batchInterval, maxBatchSize = Infinity }: BatchManagerOptions) {
+    super('BatchManager')
+    this.batchIntervalMs = batchInterval
+    this.operationsByKey = {}
+    this.batchTimer = null
+    this.maxOperationsPerBatch = maxBatchSize
   }
 
   /**
@@ -33,14 +33,14 @@ export class BatchManager extends Logger {
    * @returns {Promise<T>} A promise that resolves with the operation's result
    */
   add<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    this.ensureKeyExists(key);
+    this.ensureKeyExists(key)
 
     return new Promise<T>((resolve, reject) => {
-      const wrappedOperation = this.wrapOperation(operation, resolve, reject);
-      this.operationsByKey[key].push(wrappedOperation);
+      const wrappedOperation = this.wrapOperation(operation, resolve, reject)
+      this.operationsByKey[key].push({ operation: wrappedOperation, reject })
 
-      this.handleBatchExecution(key);
-    });
+      this.handleBatchExecution(key)
+    })
   }
 
   /**
@@ -49,29 +49,35 @@ export class BatchManager extends Logger {
    * @returns {Promise<void>}
    * @private
    */
-  private async executeBatch(specificKey?: string): Promise<void> {
-    this.clearBatchTimer();
+  private async executeBatch (specificKey?: string): Promise<void> {
+    this.clearBatchTimer()
 
     const keysToProcess = specificKey
       ? [specificKey]
-      : Object.keys(this.operationsByKey);
+      : Object.keys(this.operationsByKey)
 
     for (const key of keysToProcess) {
-      await this.processBatchForKey(key);
+      await this.processBatchForKey(key)
     }
 
-    this.scheduleNextBatchIfNeeded();
+    this.scheduleNextBatchIfNeeded()
   }
 
   /**
    * Cancels all pending operations for the specified key.
    * @param {string} key - The identifier for the batch group to cancel
    */
-  cancel(key: string): void {
-    delete this.operationsByKey[key];
+  cancel (key: string): void {
+    const operations = this.operationsByKey[key] || [];
+
+    delete this.operationsByKey[key]
+
+    operations.forEach(({ reject }) => {
+      reject(new Error('Operation canceled'))
+    })
 
     if (this.isQueueEmpty() && this.batchTimer) {
-      this.clearBatchTimer();
+      this.clearBatchTimer()
     }
   }
 
@@ -80,9 +86,9 @@ export class BatchManager extends Logger {
    * @param {string} key - The key to check and initialize if necessary
    * @private
    */
-  private ensureKeyExists(key: string): void {
+  private ensureKeyExists (key: string): void {
     if (!this.operationsByKey[key]) {
-      this.operationsByKey[key] = [];
+      this.operationsByKey[key] = []
     }
   }
 
@@ -95,19 +101,19 @@ export class BatchManager extends Logger {
    * @returns {() => Promise<void>} The wrapped operation
    * @private
    */
-  private wrapOperation<T>(
+  private wrapOperation<T> (
     operation: () => Promise<T>,
     resolve: (value: T | PromiseLike<T>) => void,
     reject: (reason?: any) => void
   ): () => Promise<void> {
     return async () => {
       try {
-        const result = await operation();
-        resolve(result);
+        const result = await operation()
+        resolve(result)
       } catch (error) {
-        reject(error);
+        reject(error)
       }
-    };
+    }
   }
 
   /**
@@ -115,11 +121,11 @@ export class BatchManager extends Logger {
    * @param {string} key - The key of the batch to handle
    * @private
    */
-  private handleBatchExecution(key: string): void {
+  private handleBatchExecution (key: string): void {
     if (this.isBatchFull(key)) {
-      this.executeBatch(key);
+      this.executeBatch(key)
     } else if (!this.batchTimer) {
-      this.scheduleBatchExecution();
+      this.scheduleBatchExecution()
     }
   }
 
@@ -129,29 +135,29 @@ export class BatchManager extends Logger {
    * @returns {boolean} True if the batch is full, false otherwise
    * @private
    */
-  private isBatchFull(key: string): boolean {
-    return this.operationsByKey[key].length >= this.maxOperationsPerBatch;
+  private isBatchFull (key: string): boolean {
+    return this.operationsByKey[key].length >= this.maxOperationsPerBatch
   }
 
   /**
    * Schedules the next batch execution.
    * @private
    */
-  private scheduleBatchExecution(): void {
+  private scheduleBatchExecution (): void {
     this.batchTimer = setTimeout(
       () => this.executeBatch(),
       this.batchIntervalMs
-    );
+    )
   }
 
   /**
    * Clears the current batch timer if it exists.
    * @private
    */
-  private clearBatchTimer(): void {
+  private clearBatchTimer (): void {
     if (this.batchTimer) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
+      clearTimeout(this.batchTimer)
+      this.batchTimer = null
     }
   }
 
@@ -166,7 +172,7 @@ export class BatchManager extends Logger {
     delete this.operationsByKey[key];
 
     try {
-      await Promise.all(operations.map((op) => op()));
+      await Promise.all(operations.map(({ operation }) => operation()));
     } catch (error) {
       this.error(`Batch execution error for key ${key}:`, error);
     }
@@ -176,9 +182,9 @@ export class BatchManager extends Logger {
    * Schedules the next batch execution if there are pending operations.
    * @private
    */
-  private scheduleNextBatchIfNeeded(): void {
+  private scheduleNextBatchIfNeeded (): void {
     if (!this.isQueueEmpty()) {
-      this.scheduleBatchExecution();
+      this.scheduleBatchExecution()
     }
   }
 
@@ -187,7 +193,7 @@ export class BatchManager extends Logger {
    * @returns {boolean} True if the queue is empty, false otherwise
    * @private
    */
-  private isQueueEmpty(): boolean {
-    return Object.keys(this.operationsByKey).length === 0;
+  private isQueueEmpty (): boolean {
+    return Object.keys(this.operationsByKey).length === 0
   }
 }

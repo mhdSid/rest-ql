@@ -1,6 +1,6 @@
-import { Logger } from "../utils/Logger";
-import { Schema, SchemaResource, ValueType, SchemaField } from "../types";
-import { SchemaError } from "../validation/errors";
+import { Logger } from '../utils/Logger'
+import { Schema, SchemaResource, ValueType, SchemaField } from '../types'
+import { SchemaError } from '../validation/errors'
 
 /**
  * SchemaValidator class for validating RestQL schemas.
@@ -8,17 +8,17 @@ import { SchemaError } from "../validation/errors";
  * @extends Logger
  */
 export class SchemaValidator extends Logger {
-  private transformFunctions: { [key: string]: Function };
-  private currentSchema: Schema;
+  private transformFunctions: { [key: string]: () => any }
+  private currentSchema: Schema
 
   /**
    * Creates an instance of SchemaValidator.
    * @param {Object.<string, Function>} transformers - A dictionary of transform functions
    */
-  constructor(transformers: { [key: string]: Function }) {
-    super("SchemaValidator");
-    this.transformFunctions = transformers;
-    this.currentSchema = {};
+  constructor (transformers: { [key: string]: () => any }) {
+    super('SchemaValidator')
+    this.transformFunctions = transformers
+    this.currentSchema = {}
   }
 
   /**
@@ -28,21 +28,21 @@ export class SchemaValidator extends Logger {
    * @param {Schema} schema - The schema to validate
    * @throws {SchemaError} If any part of the schema is invalid
    */
-  validateSchema(schema: Schema): void {
-    this.currentSchema = schema;
-    this.log("Starting schema validation");
+  validateSchema (schema: Schema): void {
+    this.currentSchema = schema
+    this.log('Starting schema validation')
     for (const [resourceName, resource] of Object.entries(schema)) {
-      if (resourceName === "_types") continue;
-      this.validateSchemaResource(resourceName, resource, true);
+      if (resourceName === '_types') continue
+      this.validateSchemaResource(resourceName, resource, true)
     }
 
     if (schema._types) {
-      this.log("Validating nested types");
+      this.log('Validating nested types')
       for (const [typeName, type] of Object.entries(schema._types)) {
-        this.validateSchemaResource(typeName, type, false);
+        this.validateSchemaResource(typeName, type, false)
       }
     }
-    this.log("Schema validation completed successfully");
+    this.log('Schema validation completed successfully')
   }
 
   /**
@@ -54,26 +54,26 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the resource is invalid
    * @private
    */
-  private validateSchemaResource(
+  private validateSchemaResource (
     resourceName: string,
     resource: SchemaResource | ValueType,
     isTopLevel: boolean
   ): void {
-    this.log(`Validating resource: ${resourceName}`);
-    this.ensureResourceIsObject(resourceName, resource);
+    this.log(`Validating resource: ${resourceName}`)
+    this.ensureResourceIsObject(resourceName, resource)
 
     if (isTopLevel) {
-      this.validateTopLevelResource(resourceName, resource as SchemaResource);
+      this.validateTopLevelResource(resourceName, resource as SchemaResource)
     }
 
-    this.ensureFieldsAreValid(resourceName, resource);
+    this.ensureFieldsAreValid(resourceName, resource)
 
     for (const [fieldName, field] of Object.entries(resource.fields)) {
-      this.validateField(resourceName, fieldName, field);
+      this.validateField(resourceName, fieldName, field)
     }
 
     if (resource.transform) {
-      this.validateResourceTransform(resourceName, resource.transform);
+      this.validateResourceTransform(resourceName, resource.transform)
     }
   }
 
@@ -85,14 +85,14 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the resource is invalid
    * @private
    */
-  private validateTopLevelResource(
+  private validateTopLevelResource (
     resourceName: string,
     resource: SchemaResource
   ): void {
-    this.ensureEndpointsAreValid(resourceName, resource);
+    this.ensureEndpointsAreValid(resourceName, resource)
 
     for (const [method, endpoint] of Object.entries(resource.endpoints)) {
-      this.ensureEndpointPathIsString(resourceName, method, endpoint);
+      this.ensureEndpointPathIsString(resourceName, method, endpoint)
     }
   }
 
@@ -105,22 +105,22 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the field is invalid
    * @private
    */
-  private validateField(
+  private validateField (
     resourceName: string,
     fieldName: string,
     field: SchemaField
   ): void {
-    this.log(`Validating field: ${fieldName} in resource ${resourceName}`);
-    this.ensureFieldIsObject(resourceName, fieldName, field);
-    this.ensureFieldTypeIsString(resourceName, fieldName, field);
-    this.ensureFieldNullabilityIsBoolean(resourceName, fieldName, field);
+    this.log(`Validating field: ${fieldName} in resource ${resourceName}`)
+    this.ensureFieldIsObject(resourceName, fieldName, field)
+    this.ensureFieldTypeIsString(resourceName, fieldName, field)
+    this.ensureFieldNullabilityIsBoolean(resourceName, fieldName, field)
 
-    this.validateFieldType(field.type, resourceName, fieldName);
+    this.validateFieldType(field.type, resourceName, fieldName)
 
-    this.ensureFieldFromIsString(resourceName, fieldName, field);
+    this.ensureFieldFromIsString(resourceName, fieldName, field)
 
     if (field.transform) {
-      this.validateFieldTransform(resourceName, fieldName, field.transform);
+      this.validateFieldTransform(resourceName, fieldName, field.transform)
     }
   }
 
@@ -133,27 +133,27 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the type is invalid
    * @private
    */
-  private validateFieldType(
+  private validateFieldType (
     type: string,
     resourceName: string,
     fieldName: string
   ): void {
-    const baseTypes = ["Boolean", "String", "Int"];
-    let strippedType = type.replace(/[\[\]!]/g, "");
+    const baseTypes = ['Boolean', 'String', 'Int']
+    const strippedType = type.replace(/[\[\]!]/g, '')
 
     if (
       !baseTypes.includes(strippedType) &&
       !this.currentSchema[strippedType.toLowerCase()] &&
       !this.currentSchema._types?.[strippedType]
     ) {
-      this.throwInvalidTypeError(type, resourceName, fieldName);
+      this.throwInvalidTypeError(type, resourceName, fieldName)
     }
 
-    if (type.includes("[")) {
-      this.validateArrayType(type, resourceName, fieldName);
+    if (type.includes('[')) {
+      this.validateArrayType(type, resourceName, fieldName)
     }
 
-    this.validateNullability(type, resourceName, fieldName);
+    this.validateNullability(type, resourceName, fieldName)
   }
 
   /**
@@ -165,15 +165,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the array type is invalid
    * @private
    */
-  private validateArrayType(
+  private validateArrayType (
     type: string,
     resourceName: string,
     fieldName: string
   ): void {
-    const arrayDepth = (type.match(/\[/g) || []).length;
-    const closingBrackets = (type.match(/\]/g) || []).length;
+    const arrayDepth = (type.match(/\[/g) || []).length
+    const closingBrackets = (type.match(/\]/g) || []).length
     if (arrayDepth !== closingBrackets) {
-      this.throwInvalidArrayTypeError(type, resourceName, fieldName);
+      this.throwInvalidArrayTypeError(type, resourceName, fieldName)
     }
   }
 
@@ -186,17 +186,17 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the nullability is invalid
    * @private
    */
-  private validateNullability(
+  private validateNullability (
     type: string,
     resourceName: string,
     fieldName: string
   ): void {
     if (
-      type.endsWith("!") &&
-      type.indexOf("[") !== -1 &&
-      type.lastIndexOf("]") < type.lastIndexOf("!")
+      type.endsWith('!') &&
+      type.indexOf('[') !== -1 &&
+      type.lastIndexOf(']') < type.lastIndexOf('!')
     ) {
-      this.throwInvalidNullabilityError(type, resourceName, fieldName);
+      this.throwInvalidNullabilityError(type, resourceName, fieldName)
     }
   }
 
@@ -208,11 +208,11 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the transform function is invalid
    * @private
    */
-  private validateResourceTransform(
+  private validateResourceTransform (
     resourceName: string,
     transform: string
   ): void {
-    this.ensureTransformIsFunction(transform, resourceName);
+    this.ensureTransformIsFunction(transform, resourceName)
   }
 
   /**
@@ -224,12 +224,12 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the transform function is invalid
    * @private
    */
-  private validateFieldTransform(
+  private validateFieldTransform (
     resourceName: string,
     fieldName: string,
     transform: string
   ): void {
-    this.ensureTransformIsFunction(transform, resourceName, fieldName);
+    this.ensureTransformIsFunction(transform, resourceName, fieldName)
   }
 
   // Helper methods for throwing specific errors
@@ -242,14 +242,14 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} Always throws this error
    * @private
    */
-  private throwInvalidTypeError(
+  private throwInvalidTypeError (
     type: string,
     resourceName: string,
     fieldName: string
   ): never {
-    const errorMsg = `Invalid type: ${type} for field ${fieldName} in resource ${resourceName}`;
-    this.error(errorMsg);
-    throw new SchemaError(errorMsg);
+    const errorMsg = `Invalid type: ${type} for field ${fieldName} in resource ${resourceName}`
+    this.error(errorMsg)
+    throw new SchemaError(errorMsg)
   }
 
   /**
@@ -260,14 +260,14 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} Always throws this error
    * @private
    */
-  private throwInvalidArrayTypeError(
+  private throwInvalidArrayTypeError (
     type: string,
     resourceName: string,
     fieldName: string
   ): never {
-    const errorMsg = `Invalid array type: ${type} for field ${fieldName} in resource ${resourceName}`;
-    this.error(errorMsg);
-    throw new SchemaError(errorMsg);
+    const errorMsg = `Invalid array type: ${type} for field ${fieldName} in resource ${resourceName}`
+    this.error(errorMsg)
+    throw new SchemaError(errorMsg)
   }
 
   /**
@@ -278,14 +278,14 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} Always throws this error
    * @private
    */
-  private throwInvalidNullabilityError(
+  private throwInvalidNullabilityError (
     type: string,
     resourceName: string,
     fieldName: string
   ): never {
-    const errorMsg = `Invalid nullability placement in array type: ${type} for field ${fieldName} in resource ${resourceName}`;
-    this.error(errorMsg);
-    throw new SchemaError(errorMsg);
+    const errorMsg = `Invalid nullability placement in array type: ${type} for field ${fieldName} in resource ${resourceName}`
+    this.error(errorMsg)
+    throw new SchemaError(errorMsg)
   }
 
   // Helper methods for common validation checks
@@ -297,11 +297,11 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the resource is not an object
    * @private
    */
-  private ensureResourceIsObject(resourceName: string, resource: any): void {
-    if (typeof resource !== "object" || resource === null) {
-      const errorMsg = `Resource ${resourceName} must be an object`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+  private ensureResourceIsObject (resourceName: string, resource: any): void {
+    if (typeof resource !== 'object' || resource === null) {
+      const errorMsg = `Resource ${resourceName} must be an object`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -312,11 +312,11 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the fields are not valid
    * @private
    */
-  private ensureFieldsAreValid(resourceName: string, resource: any): void {
-    if (typeof resource.fields !== "object" || resource.fields === null) {
-      const errorMsg = `Fields for resource ${resourceName} must be an object`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+  private ensureFieldsAreValid (resourceName: string, resource: any): void {
+    if (typeof resource.fields !== 'object' || resource.fields === null) {
+      const errorMsg = `Fields for resource ${resourceName} must be an object`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -327,18 +327,18 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the endpoints are not valid
    * @private
    */
-  private ensureEndpointsAreValid(
+  private ensureEndpointsAreValid (
     resourceName: string,
     resource: SchemaResource
   ): void {
     if (
       !resource.endpoints ||
-      typeof resource.endpoints !== "object" ||
+      typeof resource.endpoints !== 'object' ||
       resource.endpoints === null
     ) {
-      const errorMsg = `Endpoints for resource ${resourceName} must be an object`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+      const errorMsg = `Endpoints for resource ${resourceName} must be an object`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -350,15 +350,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the path is not a string
    * @private
    */
-  private ensureEndpointPathIsString(
+  private ensureEndpointPathIsString (
     resourceName: string,
     method: string,
     endpoint: any
   ): void {
-    if (typeof endpoint.path !== "string") {
-      const errorMsg = `Path for ${method} endpoint of resource ${resourceName} must be a string`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (typeof endpoint.path !== 'string') {
+      const errorMsg = `Path for ${method} endpoint of resource ${resourceName} must be a string`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -370,15 +370,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the field is not an object
    * @private
    */
-  private ensureFieldIsObject(
+  private ensureFieldIsObject (
     resourceName: string,
     fieldName: string,
     field: any
   ): void {
-    if (typeof field !== "object" || field === null) {
-      const errorMsg = `Field ${fieldName} of resource ${resourceName} must be an object`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (typeof field !== 'object' || field === null) {
+      const errorMsg = `Field ${fieldName} of resource ${resourceName} must be an object`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -390,15 +390,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the type is not a string
    * @private
    */
-  private ensureFieldTypeIsString(
+  private ensureFieldTypeIsString (
     resourceName: string,
     fieldName: string,
     field: SchemaField
   ): void {
-    if (typeof field.type !== "string") {
-      const errorMsg = `Type of field ${fieldName} of resource ${resourceName} must be a string`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (typeof field.type !== 'string') {
+      const errorMsg = `Type of field ${fieldName} of resource ${resourceName} must be a string`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -410,15 +410,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the nullability is not a boolean
    * @private
    */
-  private ensureFieldNullabilityIsBoolean(
+  private ensureFieldNullabilityIsBoolean (
     resourceName: string,
     fieldName: string,
     field: SchemaField
   ): void {
-    if (typeof field.isNullable !== "boolean") {
-      const errorMsg = `isNullable property of field ${fieldName} of resource ${resourceName} must be a boolean`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (typeof field.isNullable !== 'boolean') {
+      const errorMsg = `isNullable property of field ${fieldName} of resource ${resourceName} must be a boolean`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -430,15 +430,15 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the 'from' property is not a string
    * @private
    */
-  private ensureFieldFromIsString(
+  private ensureFieldFromIsString (
     resourceName: string,
     fieldName: string,
     field: SchemaField
   ): void {
-    if (field.from && typeof field.from !== "string") {
-      const errorMsg = `From property of field ${fieldName} of resource ${resourceName} must be a string`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (field.from && typeof field.from !== 'string') {
+      const errorMsg = `From property of field ${fieldName} of resource ${resourceName} must be a string`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 
@@ -450,16 +450,16 @@ export class SchemaValidator extends Logger {
    * @throws {SchemaError} If the transform is not a function
    * @private
    */
-  private ensureTransformIsFunction(
+  private ensureTransformIsFunction (
     transform: string,
     resourceName: string,
     fieldName?: string
   ): void {
-    if (typeof this.transformFunctions[transform] !== "function") {
-      const context = fieldName ? `field ${fieldName} of ` : "";
-      const errorMsg = `Transform ${transform} for ${context}resource ${resourceName} must be a function`;
-      this.error(errorMsg);
-      throw new SchemaError(errorMsg);
+    if (typeof this.transformFunctions[transform] !== 'function') {
+      const context = fieldName ? `field ${fieldName} of ` : ''
+      const errorMsg = `Transform ${transform} for ${context}resource ${resourceName} must be a function`
+      this.error(errorMsg)
+      throw new SchemaError(errorMsg)
     }
   }
 }

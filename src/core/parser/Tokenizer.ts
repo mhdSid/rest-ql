@@ -1,20 +1,20 @@
-import { Logger } from "../utils/Logger";
-import { ValidationError } from "../validation/errors";
-import { Token, TokenType } from "../types";
+import { Logger } from '../utils/Logger'
+import { ValidationError } from '../validation/errors'
+import { Token, TokenType } from '../types'
 
 /**
  * Tokenizer class for breaking down input strings into tokens.
  * @extends Logger
  */
 export class Tokenizer extends Logger {
-  private currentPosition = 0;
-  private inputString = "";
+  private currentPosition = 0
+  private inputString = ''
 
   /**
    * Creates an instance of Tokenizer.
    */
-  constructor() {
-    super("Tokenizer");
+  constructor () {
+    super('Tokenizer')
   }
 
   /**
@@ -23,54 +23,54 @@ export class Tokenizer extends Logger {
    * @returns {Token[]} An array of tokens
    * @throws {ValidationError} If an unexpected character is encountered
    */
-  tokenize(input: string): Token[] {
-    this.currentPosition = 0;
-    this.inputString = input;
-    const tokenList: Token[] = [];
+  tokenize (input: string): Token[] {
+    this.currentPosition = 0
+    this.inputString = input
+    const tokenList: Token[] = []
 
     while (this.currentPosition < this.inputString.length) {
-      const currentChar = this.inputString[this.currentPosition];
+      const currentChar = this.inputString[this.currentPosition]
       switch (currentChar) {
-        case "(":
-          tokenList.push(this.createToken(TokenType.LEFT_PAREN, "("));
-          break;
-        case ")":
-          tokenList.push(this.createToken(TokenType.RIGHT_PAREN, ")"));
-          break;
-        case "{":
-          tokenList.push(this.createToken(TokenType.LEFT_BRACE, "{"));
-          break;
-        case "}":
-          tokenList.push(this.createToken(TokenType.RIGHT_BRACE, "}"));
-          break;
-        case ":":
-          tokenList.push(this.createToken(TokenType.COLON, ":"));
-          break;
-        case ",":
-          tokenList.push(this.createToken(TokenType.COMMA, ","));
-          break;
+        case '(':
+          tokenList.push(this.createToken(TokenType.LEFT_PAREN, '('))
+          break
+        case ')':
+          tokenList.push(this.createToken(TokenType.RIGHT_PAREN, ')'))
+          break
+        case '{':
+          tokenList.push(this.createToken(TokenType.LEFT_BRACE, '{'))
+          break
+        case '}':
+          tokenList.push(this.createToken(TokenType.RIGHT_BRACE, '}'))
+          break
+        case ':':
+          tokenList.push(this.createToken(TokenType.COLON, ':'))
+          break
+        case ',':
+          tokenList.push(this.createToken(TokenType.COMMA, ','))
+          break
         case '"':
-          tokenList.push(this.extractStringToken());
-          break;
-        case "!":
-          tokenList.push(this.createToken(TokenType.EXCLAMATION, "!"));
-          break;
+          tokenList.push(this.extractStringToken())
+          break
+        case '!':
+          tokenList.push(this.createToken(TokenType.EXCLAMATION, '!'))
+          break
         default:
           if (this.isAlphanumericOrSpecial(currentChar)) {
-            tokenList.push(this.extractIdentifierToken());
+            tokenList.push(this.extractIdentifierToken())
           } else if (this.isWhitespace(currentChar)) {
-            this.currentPosition++;
+            this.currentPosition++
           } else {
-            const errorMsg = `Unexpected character: ${currentChar} at position ${this.currentPosition}`;
-            this.error(errorMsg);
-            throw new ValidationError(errorMsg);
+            const errorMsg = `Unexpected character: ${currentChar} at position ${this.currentPosition}`
+            this.error(errorMsg)
+            throw new ValidationError(errorMsg)
           }
       }
     }
 
-    tokenList.push(this.createToken(TokenType.EOF, ""));
-    this.log(`Tokenization complete. Total tokens: ${tokenList.length}`);
-    return tokenList;
+    tokenList.push(this.createToken(TokenType.EOF, ''))
+    this.log(`Tokenization complete. Total tokens: ${tokenList.length}`)
+    return tokenList
   }
 
   /**
@@ -80,11 +80,11 @@ export class Tokenizer extends Logger {
    * @returns {Token} The created token
    * @private
    */
-  private createToken(type: TokenType, value: string): Token {
-    const token: Token = { type, value, pos: this.currentPosition };
-    this.currentPosition += value.length;
-    this.log(`Created token: ${TokenType[type]} at position ${token.pos}`);
-    return token;
+  private createToken (type: TokenType, value: string): Token {
+    const token: Token = { type, value, pos: this.currentPosition }
+    this.currentPosition += value.length
+    this.log(`Created token: ${TokenType[type]} at position ${token.pos}`)
+    return token
   }
 
   /**
@@ -93,25 +93,24 @@ export class Tokenizer extends Logger {
    * @throws {ValidationError} If the string is unterminated
    * @private
    */
-  private extractStringToken(): Token {
-    const startPosition = this.currentPosition++;
+  private extractStringToken (): Token {
+    const startPosition = this.currentPosition++
     while (
       this.currentPosition < this.inputString.length &&
       this.inputString[this.currentPosition] !== '"'
     ) {
-      if (this.inputString[this.currentPosition] === "\\")
-        this.currentPosition++;
-      this.currentPosition++;
+      if (this.inputString[this.currentPosition] === '\\') { this.currentPosition++ }
+      this.currentPosition++
     }
     if (this.currentPosition >= this.inputString.length) {
-      const errorMsg = `Unterminated string starting at position ${startPosition}`;
-      this.error(errorMsg);
-      throw new ValidationError(errorMsg);
+      const errorMsg = `Unterminated string starting at position ${startPosition}`
+      this.error(errorMsg)
+      throw new ValidationError(errorMsg)
     }
-    this.currentPosition++;
-    const value = this.inputString.slice(startPosition, this.currentPosition);
-    this.log(`Extracted string token: ${value} at position ${startPosition}`);
-    return { type: TokenType.STRING, value, pos: startPosition };
+    this.currentPosition++
+    const value = this.inputString.slice(startPosition, this.currentPosition)
+    this.log(`Extracted string token: ${value} at position ${startPosition}`)
+    return { type: TokenType.STRING, value, pos: startPosition }
   }
 
   /**
@@ -119,19 +118,19 @@ export class Tokenizer extends Logger {
    * @returns {Token} The extracted identifier token
    * @private
    */
-  private extractIdentifierToken(): Token {
-    const startPosition = this.currentPosition;
+  private extractIdentifierToken (): Token {
+    const startPosition = this.currentPosition
     while (
       this.currentPosition < this.inputString.length &&
       this.isAlphanumericOrSpecial(this.inputString[this.currentPosition])
     ) {
-      this.currentPosition++;
+      this.currentPosition++
     }
-    const value = this.inputString.slice(startPosition, this.currentPosition);
+    const value = this.inputString.slice(startPosition, this.currentPosition)
     this.log(
       `Extracted identifier token: ${value} at position ${startPosition}`
-    );
-    return { type: TokenType.IDENTIFIER, value, pos: startPosition };
+    )
+    return { type: TokenType.IDENTIFIER, value, pos: startPosition }
   }
 
   /**
@@ -140,8 +139,8 @@ export class Tokenizer extends Logger {
    * @returns {boolean} True if the character is alphanumeric or special, false otherwise
    * @private
    */
-  private isAlphanumericOrSpecial(char: string): boolean {
-    return /[a-zA-Z0-9_$]/.test(char);
+  private isAlphanumericOrSpecial (char: string): boolean {
+    return /[a-zA-Z0-9_$]/.test(char)
   }
 
   /**
@@ -150,7 +149,7 @@ export class Tokenizer extends Logger {
    * @returns {boolean} True if the character is whitespace, false otherwise
    * @private
    */
-  private isWhitespace(char: string): boolean {
-    return /\s/.test(char);
+  private isWhitespace (char: string): boolean {
+    return /\s/.test(char)
   }
 }
