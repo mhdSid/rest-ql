@@ -419,8 +419,6 @@ export class RestQL extends Logger {
           }
         } else if (typeof fieldValue === 'object' && fieldValue.fields) {
           const nestedType = fieldSchema.type.replace(/[\[\]!]/g, '')
-        } else if (typeof fieldValue === 'object' && fieldValue.fields) {
-          const nestedType = fieldSchema.type.replace(/[\[\]!]/g, '')
           const nestedSchema = this.schema._types[nestedType]
           if (nestedSchema) {
             rawValue = await this.shapeData(
