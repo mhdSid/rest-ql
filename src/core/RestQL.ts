@@ -99,7 +99,7 @@ export class RestQL extends Logger {
         definedVariables,
         options.useCache ?? true
       )
-      return result.shapedData
+      return result
     } else if (parsedOperation.operationType === 'mutation') {
       this.log('Executing mutation')
       const result = await this.executeMutation(

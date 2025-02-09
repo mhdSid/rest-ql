@@ -1,6 +1,6 @@
 {
   "name": "lib-restql",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "A flexible and efficient REST API query language for frontend and backend",
   "main": "dist/RestQL.js",
   "types": "dist/RestQL.d.ts",
